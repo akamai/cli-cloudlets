@@ -6,10 +6,10 @@ Provides a way to interact with the Akamai Cloudlets via Open APIs. Provides var
 %  akamai install cloudlets
 ```
 
-## Local Install
+## Requirements
 * Python 3+
 * pip install edgegrid-python
-* pip install prettytable
+
 
 ### Credentials
 In order to use this module, you need to:
