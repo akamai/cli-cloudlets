@@ -1,0 +1,13 @@
+{
+  "requirements": {
+    "python": "3.0.0"
+  },
+  "commands": [
+    {
+      "name": "cloudlets",
+      "aliases": ["cloudlets"],
+      "version": "1.0.0",
+      "description": "Manage Akamai Cloudlets"
+    }
+  ]
+}
