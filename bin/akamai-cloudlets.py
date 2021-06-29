@@ -255,10 +255,10 @@ def status(config, policy_id, policy):
         table_row.append(every_policy['propertyInfo']['name'])
         table_row.append(str(every_policy['propertyInfo']['version']))
         table.add_row(table_row)
-    
+
     table.align = "l"
     print(table)
-   
+
 @cli.command(short_help='Create a new policy')
 @click.option('--group-id', metavar='', help='Group Id', required=False)
 @click.option('--group-name', metavar='', help='Group Name', required=False)
@@ -449,7 +449,7 @@ def clone(config, version, policy_id, policy, notes, new_group_name, new_group_i
     else:
         root_logger.info('Cloning policy ' + str(policy_name) + ' (latest version)')
         clone_response = cloudlet_object.create_clone_policy(session, json.dumps(data), policy_id, 'optional')
-        
+
     if clone_response.status_code == 201:
         root_logger.info('Successfully cloned policy as ' + new_policy)
         print(str(clone_response.json()['policyId']))
@@ -534,7 +534,7 @@ def update(config, policy_id, policy, notes, version, file):
         #return version number that was just created
         print(str(update_response.json()['version']))
     elif update_response.status_code == 200:
-        root_logger.info('Successfully updated policy version')    
+        root_logger.info('Successfully updated policy version')
     else:
         root_logger.info('ERROR: Unable to update policy')
         root_logger.info(json.dumps(update_response.json(), indent=4))
@@ -639,6 +639,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     else:
         root_logger.info('ERROR: Unable to activate policy')
         root_logger.info(json.dumps(activation_response.json(), indent=4))
+        exit(-1)
     return 0
 
 @cli.command(short_help='Retrieve policy version')
