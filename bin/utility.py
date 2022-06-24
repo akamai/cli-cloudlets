@@ -56,7 +56,11 @@ class Utility(object):
             root_logger.info(json.dumps(cloudlet_policies_response.json(), indent=4))
             exit(-1)
 
-        num_policies = int(cloudlet_policies_response.headers['x-total-count'])
+        try: 
+            num_policies = int(cloudlet_policies_response.headers['x-total-count'])
+        except:
+            num_policies = 0
+        
         if num_policies > 1000:
             root_logger.info('...more than 1000 policies found (' + str(num_policies) + '): may take additional time')
             
