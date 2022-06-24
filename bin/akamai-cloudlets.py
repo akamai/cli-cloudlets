@@ -34,7 +34,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = "1.0.0"
+PACKAGE_VERSION = "1.0.1"
 
 # setup logging
 if not os.path.exists('logs'):
@@ -639,6 +639,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     else:
         root_logger.info('ERROR: Unable to activate policy')
         root_logger.info(json.dumps(activation_response.json(), indent=4))
+        exit(-1)
     return 0
 
 @cli.command(short_help='Retrieve policy version')

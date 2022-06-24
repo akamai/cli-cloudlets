@@ -69,6 +69,30 @@ class Cloudlet(object):
         policies_response = session.get(self.form_url(policies_url))
         return policies_response
 
+    def list_policies_offset(self,
+                      session,
+                      offset,
+                      page_size):
+        """
+        Function to fetch policies from offset and page size
+
+        Parameters
+        -----------
+        session : <string>
+            An EdgeGrid Auth akamai session object
+
+        Returns
+        -------
+        policies_response : policies_response
+            Policies of cloudlet Id
+        """
+        policies_response = None
+        policies_url = 'https://' + self.access_hostname + \
+                           '/cloudlets/api/v2/policies?offset=' + str(offset) + '&pageSize=' + str(page_size) 
+
+        policies_response = session.get(self.form_url(policies_url))
+        return policies_response
+
     def create_clone_policy(
             self,
             session,

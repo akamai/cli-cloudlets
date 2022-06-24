@@ -50,15 +50,48 @@ class Utility(object):
         """
         policy_info = dict()
         cloudlet_policies_response = cloudlet_object.list_policies(session)
-        if cloudlet_policies_response.status_code == 200:
+
+        if cloudlet_policies_response.status_code != 200:
+            root_logger.info('ERROR: Unable to fetch policies')
+            root_logger.info(json.dumps(cloudlet_policies_response.json(), indent=4))
+            exit(-1)
+
+        try: 
+            num_policies = int(cloudlet_policies_response.headers['x-total-count'])
+        except:
+            num_policies = 0
+        
+        if num_policies > 1000:
+            root_logger.info('...more than 1000 policies found (' + str(num_policies) + '): may take additional time')
+            
+            #the first response already returns the first 1000
+            root_logger.info('...searching policies: 1-1000')
             for policy in cloudlet_policies_response.json():
                 if policy_name is not None:
                     if(str(policy["name"].lower()) == str(policy_name).lower()):
                         policy_info = policy
+                        return policy_info
+            
+            #figure out how many more api calls need to make and loop until we find it
+            max_calls = int (num_policies / 1000) + 1
+            for i in range(1,max_calls):
+                offset = i * 1000
+                start_label = offset + 1
+                end_label = start_label + 999 
+                root_logger.info('...searching policies: ' + str(start_label) + '-' + str(end_label))
+                cloudlet_policies_response = cloudlet_object.list_policies_offset(session,offset,1000)
+                for policy in cloudlet_policies_response.json():
+                    if policy_name is not None:
+                        if(str(policy["name"].lower()) == str(policy_name).lower()):
+                            policy_info = policy
+                            return policy_info
+                
         else:
-            root_logger.info('ERROR: Unable to fetch policies')
-            root_logger.info(json.dumps(cloudlet_policies_response.json(), indent=4))
-            exit(-1)
+            for policy in cloudlet_policies_response.json():
+                if policy_name is not None:
+                    if(str(policy["name"].lower()) == str(policy_name).lower()):
+                        policy_info = policy
+                        return policy_info
 
         #If policy_info is empty, we check for not null after return
         return policy_info
