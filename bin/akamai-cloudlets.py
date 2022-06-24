@@ -34,7 +34,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = "1.0.0"
+PACKAGE_VERSION = "1.0.1"
 
 # setup logging
 if not os.path.exists('logs'):
