@@ -31,7 +31,7 @@ class Utility:
             (cloudlet_code) string with cloudlet code
         """
         cloudlet_code = {'ER': 0, 'VP': 1, 'FR': 3, 'IG': 4,
-                        'AP': 5, 'AS': 6, 'CD': 7, 'IV': 8, 'ALB': 9}
+                         'AP': 5, 'AS': 6, 'CD': 7, 'IV': 8, 'ALB': 9}
         return cloudlet_code
 
     def get_policy_by_name(self, session, cloudlet_object, policy_name, root_logger):

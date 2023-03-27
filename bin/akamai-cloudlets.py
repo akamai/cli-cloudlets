@@ -24,11 +24,14 @@ from time import gmtime
 from time import strftime
 
 import click
+import pandas as pd
 import requests
 from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
 from cloudlet_api_wrapper import Cloudlet
 from prettytable import PrettyTable
+from rich import print_json
+from tabulate import tabulate
 from utility import Utility
 
 """
@@ -107,7 +110,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
 @click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'), help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
 @click.option('--section', metavar='', help='Section of the credentials file [$AKAMAI_EDGERC_SECTION]', required=False)
-@click.option('--account-key', metavar='', help='Account Key', required=False)
+@click.option('-a', '--account-key', metavar='', help='Account Key', required=False)
 @click.version_option(version=PACKAGE_VERSION)
 @pass_config
 def cli(config, edgerc, section, account_key):
@@ -128,7 +131,7 @@ def help(ctx):
     print(ctx.parent.get_help())
 
 
-@cli.command(short_help='List policies')
+@cli.command(short_help='List Policies')
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
@@ -142,23 +145,20 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
 
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
-    # fetch the clouldlet type code
-    cloudlet_id = 'optional'
     cloudlet_type = cloudlet_type
     name_contains = name_contains
     if cloudlet_type:
         if cloudlet_type.upper() not in utility_object.do_cloudlet_code_map().keys():
-            root_logger.info('ERROR: ' + cloudlet_type + ' is not a valid cloudlet type code')
+            root_logger.info(f'ERROR: {cloudlet_type} is not a valid cloudlet type code')
             keys = []
             for key in utility_object.do_cloudlet_code_map():
                 keys.append(key)
-            print('Cloudlet Type Codes: ' + str(keys))
+            print(f'Cloudlet Type Codes: {keys}')
             exit(-1)
         else:
-            cloudlet_id = utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
+            utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
 
     root_logger.info('...fetching policy list')
-    # get all policies because api that uses cloudletId code query string value doesn't work
     policies_response = cloudlet_object.list_policies(session)
     if policies_response.status_code == 200:
         policies_data = policies_response.json()
@@ -167,54 +167,94 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
         root_logger.info(json.dumps(policies_response.json(), indent=4))
         exit(-1)
 
-    # setup a table
-    table = PrettyTable(['Policy ID', 'Policy Name', 'Type', 'Group ID'])
-    policies_list = []
-    for every_policy in policies_data:
-        table_row = []
-        current_policy_data = dict()
-        current_policy_data['policyId'] = every_policy['policyId']
-        current_policy_data['name'] = every_policy['name']
-        current_policy_data['cloudletCode'] = every_policy['cloudletCode']
-        current_policy_data['groupId'] = every_policy['groupId']
+    df = pd.DataFrame(policies_data)
+    df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
+    df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID']]
+    df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
+    df.reset_index(drop=True, inplace=True)
 
-        # populate table row, but only add it later if passes filter
-        table_row.append(every_policy['policyId'])
-        table_row.append(every_policy['name'])
-        table_row.append(every_policy['cloudletCode'])
-        table_row.append(every_policy['groupId'])
+    if name_contains:  # check whether user passed a filter
+        df = df[df['Policy Name'].str.contains(name_contains, case=False)]
+        df.reset_index(drop=True, inplace=True)
 
-        # check whether user passed a filter
-        if name_contains:
-            if name_contains.upper() in every_policy['name'].upper():
-                # also searching by cloudlet-type?
-                if cloudlet_type:
-                    if cloudlet_type.upper() in every_policy['cloudletCode'].upper():
-                        policies_list.append(current_policy_data)
-                        table.add_row(table_row)
-                else:
-                    policies_list.append(current_policy_data)
-                    table.add_row(table_row)
-        # only searching by cloudlet type
-        elif cloudlet_type:
-            if cloudlet_type.upper() in every_policy['cloudletCode'].upper():
-                policies_list.append(current_policy_data)
-                table.add_row(table_row)
-        # not searching by anything just add to list
-        else:
-            policies_list.append(current_policy_data)
-            table.add_row(table_row)
+    if cloudlet_type:  # only searching by cloudlet type
+        df = df[df['Type'] == cloudlet_type.upper()]
+        df.reset_index(drop=True, inplace=True)
 
     if optjson:
-        print(json.dumps(policies_list, indent=4))
+        print_json(df.to_json(orient='records'))
     elif optcsv:
-        print('Policy ID,Policy Name,Type,Group ID')
-        for every_policy in policies_list:
-            print(str(every_policy['policyId']) + ',' + str(every_policy['name'] + ',' + str(every_policy['cloudletCode']) + ',' + str(every_policy['groupId'])))
+        df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
+        with open('temp_output.csv') as f:
+            for line in f:
+                print(line.rstrip())
+        os.remove('temp_output.csv')
     else:
-        table.align = 'l'
-        print(table)
-        root_logger.info(str(len(policies_list)) + ' policies found')
+        print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+    root_logger.info(f'{len(df.index)} policies found')
+
+
+@cli.command(short_help='List Share Policies')
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
+@click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
+@click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
+@click.option('--name-contains', metavar='', help='String to use for searching for policies by name', required=False)
+@pass_config
+def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
+    '''
+    List Share Policies
+    '''
+    base_url, session = init_config(config.edgerc, config.section)
+
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    utility_object = Utility()
+    cloudlet_type = cloudlet_type
+    name_contains = name_contains
+    if cloudlet_type:
+        if cloudlet_type.upper() not in utility_object.do_cloudlet_code_map().keys():
+            root_logger.info(f'ERROR: {cloudlet_type} is not a valid cloudlet type code')
+            keys = []
+            for key in utility_object.do_cloudlet_code_map():
+                keys.append(key)
+            print(f'Cloudlet Type Codes: {keys}')
+            exit(-1)
+        else:
+            utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
+
+    root_logger.info('...fetching policy list')
+    policies_response = cloudlet_object.list_share_policies(session)
+    if policies_response.status_code == 200:
+        policies_data = policies_response.json()['content']
+    else:
+        root_logger.info('ERROR: Unable to fetch policy list')
+        root_logger.info(json.dumps(policies_response.json(), indent=4))
+        exit(-1)
+
+    df = pd.DataFrame(policies_data)
+    df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name', 'cloudletType': 'Type', 'groupId': 'Group ID'}, inplace=True)
+    df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID']]
+    df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
+    df.reset_index(drop=True, inplace=True)
+
+    if name_contains:  # check whether user passed a filter
+        df = df[df['Policy Name'].str.contains(name_contains, case=False)]
+        df.reset_index(drop=True, inplace=True)
+
+    if cloudlet_type:  # only searching by cloudlet type
+        df = df[df['Type'] == cloudlet_type.upper()]
+        df.reset_index(drop=True, inplace=True)
+
+    if optjson:
+        print_json(df.to_json(orient='records'))
+    elif optcsv:
+        df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
+        with open('temp_output.csv') as f:
+            for line in f:
+                print(line.rstrip())
+        os.remove('temp_output.csv')
+    else:
+        print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+    root_logger.info(f'{len(df.index)} shared policies found')
 
 
 @cli.command(short_help='Show status for a specific policy')

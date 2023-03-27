@@ -43,30 +43,15 @@ class Cloudlet:
         cloudlet_group_response = session.get(self.form_url(cloudlet_group_url))
         return cloudlet_group_response
 
-    def list_policies(self,
-                      session,
-                      cloudlet_id='optional'):
-        """
-        Function to fetch Policies from cloudletId and GroupId
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        policies_response : policies_response
-            Policies of cloudlet Id
-        """
+    def list_policies(self, session):
         policies_response = None
-        if cloudlet_id == 'optional':
-            policies_url = 'https://' + self.access_hostname + \
-                           '/cloudlets/api/v2/policies'
-        # bug with list cloudlets api (cloudletId query string not working)
-        # else:
-        #    policies_url = 'https://' + self.access_hostname + \
-        #                   '/cloudlets/api/v2/policies?cloudletId=' + str(cloudlet_id)
+        policies_url = f'https://{self.access_hostname}/cloudlets/api/v2/policies'
+        policies_response = session.get(self.form_url(policies_url))
+        return policies_response
+
+    def list_share_policies(self, session):
+        policies_response = None
+        policies_url = f'https://{self.access_hostname}/cloudlets/v3/policies'
         policies_response = session.get(self.form_url(policies_url))
         return policies_response
 
