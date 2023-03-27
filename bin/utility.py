@@ -11,11 +11,12 @@ Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
  See the License for the specific language governing permissions and
  limitations under the License.
 """
+from __future__ import annotations
 
 import json
 
 
-class Utility(object):
+class Utility:
 
     def do_cloudlet_code_map(self):
         """
@@ -29,7 +30,7 @@ class Utility(object):
         cloudlet_code : cloudlet_code
             (cloudlet_code) string with cloudlet code
         """
-        cloudlet_code= {'ER': 0, 'VP': 1,'FR': 3, 'IG' : 4,
+        cloudlet_code = {'ER': 0, 'VP': 1, 'FR': 3, 'IG': 4,
                         'AP': 5, 'AS': 6, 'CD': 7, 'IV': 8, 'ALB': 9}
         return cloudlet_code
 
@@ -56,44 +57,44 @@ class Utility(object):
             root_logger.info(json.dumps(cloudlet_policies_response.json(), indent=4))
             exit(-1)
 
-        try: 
+        try:
             num_policies = int(cloudlet_policies_response.headers['x-total-count'])
         except:
             num_policies = 0
-        
+
         if num_policies > 1000:
             root_logger.info('...more than 1000 policies found (' + str(num_policies) + '): may take additional time')
-            
-            #the first response already returns the first 1000
+
+            # the first response already returns the first 1000
             root_logger.info('...searching policies: 1-1000')
             for policy in cloudlet_policies_response.json():
                 if policy_name is not None:
-                    if(str(policy["name"].lower()) == str(policy_name).lower()):
-                        policy_info = policy
-                        return policy_info
-            
-            #figure out how many more api calls need to make and loop until we find it
-            max_calls = int (num_policies / 1000) + 1
-            for i in range(1,max_calls):
-                offset = i * 1000
-                start_label = offset + 1
-                end_label = start_label + 999 
-                root_logger.info('...searching policies: ' + str(start_label) + '-' + str(end_label))
-                cloudlet_policies_response = cloudlet_object.list_policies_offset(session,offset,1000)
-                for policy in cloudlet_policies_response.json():
-                    if policy_name is not None:
-                        if(str(policy["name"].lower()) == str(policy_name).lower()):
-                            policy_info = policy
-                            return policy_info
-                
-        else:
-            for policy in cloudlet_policies_response.json():
-                if policy_name is not None:
-                    if(str(policy["name"].lower()) == str(policy_name).lower()):
+                    if (str(policy['name'].lower()) == str(policy_name).lower()):
                         policy_info = policy
                         return policy_info
 
-        #If policy_info is empty, we check for not null after return
+            # figure out how many more api calls need to make and loop until we find it
+            max_calls = int(num_policies / 1000) + 1
+            for i in range(1, max_calls):
+                offset = i * 1000
+                start_label = offset + 1
+                end_label = start_label + 999
+                root_logger.info('...searching policies: ' + str(start_label) + '-' + str(end_label))
+                cloudlet_policies_response = cloudlet_object.list_policies_offset(session, offset, 1000)
+                for policy in cloudlet_policies_response.json():
+                    if policy_name is not None:
+                        if (str(policy['name'].lower()) == str(policy_name).lower()):
+                            policy_info = policy
+                            return policy_info
+
+        else:
+            for policy in cloudlet_policies_response.json():
+                if policy_name is not None:
+                    if (str(policy['name'].lower()) == str(policy_name).lower()):
+                        policy_info = policy
+                        return policy_info
+
+        # If policy_info is empty, we check for not null after return
         return policy_info
 
     def get_policy_by_id(self, session, cloudlet_object, policy_id, root_logger):
@@ -112,17 +113,16 @@ class Utility(object):
             (policy_info) Dictionary containing all the details of policy
         """
         policy_info = dict()
-        policy_response = cloudlet_object.get_policy(session,policy_id)
+        policy_response = cloudlet_object.get_policy(session, policy_id)
         if policy_response.status_code == 200:
             policy_info = policy_response.json()
         else:
             root_logger.info('ERROR: Unable to find existing policy')
             root_logger.info(json.dumps(policy_response.json(), indent=4))
-            exit(-1)        
+            exit(-1)
 
-        #If policy_info is empty, we check for not null after return
+        # If policy_info is empty, we check for not null after return
         return policy_info
-
 
     def get_latest_version(self, session, cloudlet_object, policy_id, root_logger):
         """
@@ -140,8 +140,8 @@ class Utility(object):
             (policy_version) integer (latest policy version)
         """
         policy_versions_response = cloudlet_object.list_policy_versions(session, policy_id, page_size=1)
-        if policy_versions_response.status_code ==200:
-            #If for some reason, can't find a version
+        if policy_versions_response.status_code == 200:
+            # If for some reason, can't find a version
             if len(policy_versions_response.json()) > 0:
                 version = str(policy_versions_response.json()[0]['version'])
             else:
