@@ -389,23 +389,23 @@ def create_policy(config, group_id, group_name, notes, policy, cloudlet_type):
         description = notes
     else:
         # notes not specified, create our own default description
-        description = str(policy_name) + ' (Created by Cloudlet CLI)'
+        description = f'{policy_name} (Created by Cloudlet CLI)'
 
     if group_id and group_name:
         root_logger.info('Please specify either group-id or group-name.')
         exit(-1)
 
-    if not group_id and not group_name:
+    if group_id is None and group_name is None:
         root_logger.info('Please specify either group-id or group-name.')
         exit(-1)
 
     # verify valid cloudlet type code
     if cloudlet_type not in utility_object.do_cloudlet_code_map().keys():
-        root_logger.info('ERROR: ' + cloudlet_type + ' is not a valid cloudlet type code')
+        root_logger.info(f'ERROR: {cloudlet_type}is not a valid cloudlet type code')
         keys = []
         for key in utility_object.do_cloudlet_code_map():
             keys.append(key)
-        print('Cloudlet Type Codes: ' + str(keys))
+        print(f'Cloudlet Type Codes: {keys}')
         exit(-1)
     else:
         cloudlet_id = utility_object.do_cloudlet_code_map()[cloudlet_type]
@@ -413,21 +413,18 @@ def create_policy(config, group_id, group_name, notes, policy, cloudlet_type):
     # group name passed, so check to see if it exists
     if group_name:
         found_group = False
-        root_logger.info('...searching for group: ' + str(group_name))
+        root_logger.info(f'...searching for group: {group_name}')
         group_response = cloudlet_object.get_groups(session)
         if group_response.status_code == 200:
             for every_group in group_response.json():
                 if every_group['groupName'].upper() == group_name.upper():
                     group_id = every_group['groupId']
-                    root_logger.info('...found group-id: ' + str(every_group['groupId']))
+                    root_logger.info(f'...found group-id: {every_group["groupId"]}')
                     found_group = True
                     pass
             if not found_group:
-                root_logger.info('ERROR: Unable to find group: ' + str(group_name))
+                root_logger.info(f'ERROR: Unable to find group: {group_name}')
                 exit(-1)
-    else:
-        # group-id is passed, so use it
-        pass
 
     policy_data = dict()
     policy_data['cloudletId'] = cloudlet_id
@@ -438,13 +435,58 @@ def create_policy(config, group_id, group_name, notes, policy, cloudlet_type):
     create_response = cloudlet_object.create_clone_policy(session, json.dumps(policy_data))
 
     if create_response.status_code == 201:
-        print(str(create_response.json()['policyId']))
+        print(f'Policy {create_response.json()["policyId"]} created successfully')
         pass
     else:
         root_logger.info('ERROR: Unable to create policy')
         root_logger.info(json.dumps(create_response.json(), indent=4))
 
     return 0
+
+
+@cli.command(short_help='Create a new shared policy')
+@click.option('-p', '--policy', metavar='', help='Policy Name', required=True)
+@click.option('-t', '--cloudlet-type', type=click.Choice(['AS', 'ER', 'FR', 'VWR'], case_sensitive=False),
+               help='Abbreviation code for cloudlet type', required=True)
+@click.option('-g', '--group-id', metavar='', type=int, help='Group Id without grp_', required=False)
+@click.option('--group-name', metavar='', type=str, help='Group Name', required=False)
+@click.option('-n', '--notes', metavar='', help='Policy Notes', required=False)
+@pass_config
+def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, notes):
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+
+    if group_id and group_name:
+        root_logger.info('Please specify either group-id or group-name.')
+        exit(-1)
+
+    if group_id is None and group_name is None:
+        root_logger.info('Please specify either group-id or group-name.')
+        exit(-1)
+
+    # validate group-name
+    if group_name:
+        found_group = False
+        root_logger.info(f'...searching for group: {group_name}')
+        group_response = cloudlet_object.get_groups(session)
+        if group_response.status_code == 200:
+            for every_group in group_response.json():
+                if every_group['groupName'].upper() == group_name.upper():
+                    group_id = every_group['groupId']
+                    root_logger.info(f'...found group-id: {every_group["groupId"]}')
+                    found_group = True
+                    pass
+            if not found_group:
+                root_logger.info(f'ERROR: Unable to find group: {group_name}')
+                exit(-1)
+
+    response = cloudlet_object.create_shared_policy(session, name=policy, cloudlet_type=cloudlet_type, group_id=group_id, notes=notes)
+    if response.status_code == 201:
+        print(f'Policy {response.json()["id"]} created successfully')
+    else:
+        root_logger.info('ERROR: Unable to create policy')
+        root_logger.info(json.dumps(response.json(), indent=4))
+        exit(-1)
 
 
 @cli.command(short_help='Clone policy from an existing policy')

@@ -29,21 +29,7 @@ class Cloudlet:
             self.account_switch_key = ''
 
     def get_groups(self, session):
-        """
-        Function to fetch all groups
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        group_id_list : List
-            group_response_json with list of all groupIds
-        """
-        cloudlet_group_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/group-info'
-
+        cloudlet_group_url = f'https://{self.access_hostname}/cloudlets/api/v2/group-info'
         cloudlet_group_response = session.get(self.form_url(cloudlet_group_url))
         return cloudlet_group_response
 
@@ -180,6 +166,23 @@ class Cloudlet:
 
         cloudlet_policy_create_response = session.post(self.form_url(cloudlet_policy_create_url), data=data, headers=headers)
         return cloudlet_policy_create_response
+
+    def create_shared_policy(self, session, name: str, cloudlet_type: str,
+                             group_id: int,
+                             notes: str):
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies'
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'}
+        if notes is None:
+            notes = 'Created by Cloudlet CLI'
+        payload = {'name': name,
+                   'cloudletType': cloudlet_type,
+                   'groupId': group_id,
+                   'description': notes,
+                   'policyType': 'SHARED'
+                  }
+        response = session.post(self.form_url(url), json=payload, headers=headers)
+        return response
 
     def get_policy(self,
                    session,
