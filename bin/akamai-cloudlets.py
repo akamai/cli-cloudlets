@@ -131,7 +131,7 @@ def help(ctx):
     print(ctx.parent.get_help())
 
 
-@cli.command(short_help='List Policies')
+@cli.command(short_help='List policies')
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
@@ -194,7 +194,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
     root_logger.info(f'{len(df.index)} policies found')
 
 
-@cli.command(short_help='List Share Policies')
+@cli.command(short_help='List shared policies')
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
@@ -222,12 +222,10 @@ def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
             utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
 
     root_logger.info('...fetching policy list')
-    policies_response = cloudlet_object.list_share_policies(session)
-    if policies_response.status_code == 200:
-        policies_data = policies_response.json()['content']
-    else:
+    policies_data = cloudlet_object.list_share_policies(session)
+    if not policies_data:
         root_logger.info('ERROR: Unable to fetch policy list')
-        root_logger.info(json.dumps(policies_response.json(), indent=4))
+        root_logger.info(json.dumps(policies_data.json(), indent=4))
         exit(-1)
 
     df = pd.DataFrame(policies_data)
@@ -310,6 +308,52 @@ def status(config, policy_id, policy):
 
     table.align = 'l'
     print(table)
+
+
+@cli.command(short_help='Show status for a specific shared policy')
+@click.option('--policy-id', metavar='', help='Policy Id', required=False)
+@click.option('--policy', metavar='', help='Policy Name', required=False)
+@pass_config
+def status_share(config, policy_id, policy):
+    base_url, session = init_config(config.edgerc, config.section)
+
+    if policy_id and policy:
+        root_logger.info('Please specify either policy or policy-id')
+        exit(-1)
+
+    if not policy_id and not policy:
+        root_logger.info('Please specify either policy or policy-id')
+        exit(-1)
+
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    if policy:
+        root_logger.info(f'...searching for cloudlet policy {policy}')
+        policy_id, policy_info = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
+    else:
+        root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
+        name, policy_info = cloudlet_object.list_shared_policies_by_id(session, policy_id=policy_id)
+        print(f'Policy Name: {name}') if name else None
+
+    if not policy_info:
+        root_logger.info('Not found')
+    else:
+        df = pd.DataFrame(policy_info)
+        staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
+        production = df.loc[df['network'] == 'production'].iloc[0, 0]
+
+        df = cloudlet_object.get_active_properties(session, policy_id)
+        df['policy version'] = df.apply(lambda row: fill_column(row, staging, production), axis=1)
+
+        new_header = f'Policy ID ({policy_id}) version'
+        df.rename(columns={'policy version': new_header}, inplace=True)
+        columns = [new_header, 'network', 'property name', 'property version']
+        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
+
+
+def fill_column(row, staging_version: int, production_version: int):
+    if row['network'] == 'staging':
+        return staging_version
+    return production_version
 
 
 @cli.command(short_help='Create a new policy')

@@ -15,6 +15,10 @@ from __future__ import annotations
 
 import json
 
+import pandas as pd
+from rich import print_json
+from tabulate import tabulate
+
 
 class Cloudlet:
     def __init__(self, access_hostname, account_switch_key):
@@ -49,11 +53,72 @@ class Cloudlet:
         policies_response = session.get(self.form_url(policies_url))
         return policies_response
 
-    def list_share_policies(self, session):
-        policies_response = None
-        policies_url = f'https://{self.access_hostname}/cloudlets/v3/policies'
-        policies_response = session.get(self.form_url(policies_url))
-        return policies_response
+    def list_shared_policies(self, session) -> list:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            return response.json()['content']
+        else:
+            return response
+
+    def list_shared_policies_by_name(self, session, policy_name: str) -> tuple:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            data = response.json()['content']
+            df = pd.DataFrame(data)
+            df = df[df['name'] == policy_name]
+            if not df.empty:
+                id = df['id'].values[0]
+                _, policy_info = self.list_shared_policies_by_id(session, policy_id=id)
+                return id, policy_info
+        return None, None
+
+    def list_shared_policies_by_id(self, session, policy_id: int) -> tuple:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}'
+        response = session.get(self.form_url(url))
+        name = None
+        policy_info = []
+        if response.status_code == 200:
+            data = response.json()
+            staging = data['currentActivations']['staging']['latest']['policyVersion']
+            production = data['currentActivations']['production']['latest']['policyVersion']
+            name = data['name']
+            header = f'Policy ID ({policy_id}) version'
+            policy_info.append({header: staging, 'network': 'staging'})
+            policy_info.append({header: production, 'network': 'production'})
+        return name, policy_info
+
+    def list_shared_policy_versions(self, session, policy_id: int) -> pd.DataFrame:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            df = pd.DataFrame(data=response.json()['content'])
+            columns = ['id', 'description', 'version', 'modifiedDate']
+            df.sort_values(by='version', ascending=False, inplace=True)
+            return df[columns]
+
+    def list_shared_policy_activations(self, session, policy_id: int) -> pd.DataFrame:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            df = pd.DataFrame(data=response.json()['content'])
+            columns = ['operation', 'policyVersion', 'network', 'createdDate']
+            df.sort_values(by='createdDate', ascending=False, inplace=True)
+            return df[columns]
+
+    def get_active_properties(self, session, policy_id) -> pd.DataFrame:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            data = response.json()['content']
+            columns = ['network', 'property name', 'property version']
+            df = pd.DataFrame(data)
+            df['network'] = df['network'].apply(str.lower)
+            df.sort_values(by='network', ascending=False, inplace=True)
+            df.rename(columns={'name': 'property name',
+                               'version': 'property version'}, inplace=True)
+            return df[columns]
 
     def list_policies_offset(self,
                       session,
