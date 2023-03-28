@@ -24,6 +24,7 @@ from time import gmtime
 from time import strftime
 
 import click
+import numpy as np
 import pandas as pd
 import requests
 from akamai.edgegrid import EdgeGridAuth
@@ -806,13 +807,14 @@ def activate(config, policy_id, policy, version, add_properties, network):
     return 0
 
 
-@cli.command(short_help='Retrieve policy version')
+@cli.command(short_help='Retrieve policy detail version')
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--version', metavar='', help='Policy version number', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, required=False)
 @pass_config
-def retrieve(config, version, policy_id, policy, only_match_rules):
+def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
     """
     Retrieve policy version
     """
@@ -833,16 +835,16 @@ def retrieve(config, version, policy_id, policy, only_match_rules):
 
     # get policy
     if policy:
-        root_logger.info('...searching for cloudlet policy ' + str(policy_name))
+        root_logger.info(f'...searching for cloudlet policy {policy_name}')
         policy_info = utility_object.get_policy_by_name(session, cloudlet_object, policy_name, root_logger)
     else:
-        root_logger.info('...searching for cloudlet policy-id ' + str(policy_id))
+        root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
         policy_info = utility_object.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
 
     try:
         policy_id = policy_info['policyId']
         policy_name = policy_info['name']
-        root_logger.info('...found policy-id ' + str(policy_id))
+        root_logger.info(f'...found policy-id {policy_id}')
     except:
         root_logger.info('ERROR: Unable to find existing policy')
         exit(-1)
@@ -853,22 +855,53 @@ def retrieve(config, version, policy_id, policy, only_match_rules):
         # version not specified, find latest version to use
         version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
 
-    root_logger.info('Retrieving version: ' + str(version))
+    root_logger.info(f'Retrieving version: {version}')
     retrieve_response = cloudlet_object.get_policy_version(session, policy_id, version)
     if retrieve_response.status_code == 200:
         if only_match_rules:
             # retrieve only matchRules section and strip out location akaRuleId
             matchRules = []
-            for every_match_rule in retrieve_response.json()['matchRules']:
-                if 'location' in every_match_rule:
-                    del every_match_rule['location']
-                if 'akaRuleId' in every_match_rule:
-                    del every_match_rule['akaRuleId']
-                matchRules.append(every_match_rule)
+            try:
+                for every_match_rule in retrieve_response.json()['matchRules']:
+                    if 'location' in every_match_rule:
+                        del every_match_rule['location']
+                    if 'akaRuleId' in every_match_rule:
+                        del every_match_rule['akaRuleId']
+                    matchRules.append(every_match_rule)
+                if optjson:
+                    print_json(json.dumps({'matchRules': matchRules}))
+                else:
+                    df = pd.DataFrame(matchRules)
+                    columns = ['name', 'statusCode', 'redirectURL', 'useIncomingQueryString', 'useRelativeUrl']  # , 'useIncomingSchemeAndHost' ]
+                    matchURL = df['matchURL'].unique().tolist()
+                    if len(matchURL) > 1:
+                        columns.append('matchURL')
+                    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-            print(json.dumps({'matchRules': matchRules}, indent=4))
+                    df = pd.DataFrame(matchRules)
+                    columns = []
+                    id = df['id'].unique().tolist()
+                    start = df['start'].unique().tolist()
+                    end = df['end'].unique().tolist()
+                    if len(id) > 1:
+                        columns.append('id')
+                    if len(start) > 1:
+                        columns.append('start')
+                    if len(end) > 1:
+                        columns.append('end')
+                    columns.append('matches')
+                    df.replace(np.nan, '', regex=True, inplace=True)
+                    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            except:
+                root_logger.info('ERROR: Unable to retrieve matchRules')
         else:
-            print(json.dumps(retrieve_response.json(), indent=4))
+            if optjson:
+                print_json(json.dumps(retrieve_response.json()))
+            else:
+                df = pd.DataFrame.from_dict(retrieve_response.json(), orient='index')
+                transposed_df = df.T
+                columns = ['description', 'policyId', 'version', 'lastModifiedBy', 'activations']
+                print(tabulate(transposed_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
     else:
         root_logger.info('ERROR: Unable to retrieve policy version')
         root_logger.info(json.dumps(retrieve_response.json(), indent=4))
