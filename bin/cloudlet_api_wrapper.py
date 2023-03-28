@@ -130,6 +130,18 @@ class Cloudlet:
         policies_response = session.get(self.form_url(policies_url))
         return policies_response
 
+    def clone_policy(self, session, name: str, policy_id: int, group_id: int, version: list | None = None):
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/clone'
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'}
+        payload = {}
+        if version:
+            payload['additionalVersions'] = version
+        payload['newName'] = name
+        payload['groupId'] = group_id
+        response = session.post(self.form_url(url), json=payload, headers=headers)
+        return response
+
     def create_clone_policy(
             self,
             session,

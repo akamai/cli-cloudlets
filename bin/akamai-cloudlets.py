@@ -32,6 +32,7 @@ from cloudlet_api_wrapper import Cloudlet
 from prettytable import PrettyTable
 from rich import print_json
 from tabulate import tabulate
+from utility import PythonLiteralOption
 from utility import Utility
 
 """
@@ -222,7 +223,7 @@ def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
             utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
 
     root_logger.info('...fetching policy list')
-    policies_data = cloudlet_object.list_share_policies(session)
+    policies_data = cloudlet_object.list_shared_policies(session)
     if not policies_data:
         root_logger.info('ERROR: Unable to fetch policy list')
         root_logger.info(json.dumps(policies_data.json(), indent=4))
@@ -251,7 +252,7 @@ def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
                 print(line.rstrip())
         os.remove('temp_output.csv')
     else:
-        print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+        print(tabulate(df, headers='keys', tablefmt='psql', showindex=False, numalign='left'))
     root_logger.info(f'{len(df.index)} shared policies found')
 
 
@@ -347,7 +348,7 @@ def status_share(config, policy_id, policy):
         new_header = f'Policy ID ({policy_id}) version'
         df.rename(columns={'policy version': new_header}, inplace=True)
         columns = [new_header, 'network', 'property name', 'property version']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
+        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
 
 def fill_column(row, staging_version: int, production_version: int):
@@ -489,7 +490,7 @@ def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, no
         exit(-1)
 
 
-@cli.command(short_help='Clone policy from an existing policy')
+@cli.command(short_help='Deprecated')
 @click.option('--version', metavar='', help='Policy version number', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
@@ -498,7 +499,7 @@ def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, no
 @click.option('--new-group-id', metavar='', help='Group Id of new policy', required=False)
 @click.option('--new-policy', metavar='', help='New Policy Name', required=True)
 @pass_config
-def clone(config, version, policy_id, policy, notes, new_group_name, new_group_id, new_policy):
+def clone_apiv2(config, version, policy_id, policy, notes, new_group_name, new_group_id, new_policy):
     """
     Clone policy from an existing policy
     """
@@ -599,6 +600,27 @@ def clone(config, version, policy_id, policy, notes, new_group_name, new_group_i
         exit(-1)
 
     return 0
+
+
+@cli.command(short_help='Clone policy from an existing policy using API v3')
+@click.option('--policy-id', metavar='', type=int, help='Policy Id', required=True)
+@click.option('--version', metavar='', cls=PythonLiteralOption, help='Policy version numbers to be cloned from i.e. [1] or [1,2,3]', default=[], required=False)
+@click.option('--group-id', metavar='', type=int, help='Group ID of new policy', required=True)
+@click.option('--new-policy', metavar='', help='New Policy Name', required=True)
+@pass_config
+def clone(config, version, policy_id, group_id, new_policy):
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    if not version:
+        response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id)
+    else:
+        response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id, version=version)
+    if response.status_code == 200:
+        print(f'Policy {response.json()["id"]} clone successfully')
+    else:
+        root_logger.info('ERROR: Unable to clone policy')
+        root_logger.info(json.dumps(response.json(), indent=4))
+        exit(-1)
 
 
 @cli.command(short_help='Update new policy version with rules')

@@ -13,7 +13,10 @@ Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import ast
 import json
+
+import click
 
 
 class Utility:
@@ -153,3 +156,12 @@ class Utility:
             exit(-1)
 
         return version
+
+
+class PythonLiteralOption(click.Option):
+
+    def type_cast_value(self, ctx, value):
+        try:
+            return ast.literal_eval(value)
+        except:
+            return None
