@@ -344,12 +344,13 @@ def status_share(config, policy_id, policy):
         production = df.loc[df['network'] == 'production'].iloc[0, 0]
 
         df = cloudlet_object.get_active_properties(session, policy_id)
-        df['policy version'] = df.apply(lambda row: fill_column(row, staging, production), axis=1)
+        if not df.empty:
+            df['policy version'] = df.apply(lambda row: fill_column(row, staging, production), axis=1)
 
-        new_header = f'Policy ID ({policy_id}) version'
-        df.rename(columns={'policy version': new_header}, inplace=True)
-        columns = [new_header, 'network', 'property name', 'property version']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            new_header = f'Policy ID ({policy_id}) version'
+            df.rename(columns={'policy version': new_header}, inplace=True)
+            columns = [new_header, 'network', 'property name', 'property version']
+            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
 
 def fill_column(row, staging_version: int, production_version: int):

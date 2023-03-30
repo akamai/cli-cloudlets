@@ -67,8 +67,14 @@ class Cloudlet:
         policy_info = []
         if response.status_code == 200:
             data = response.json()
-            staging = data['currentActivations']['staging']['latest']['policyVersion']
-            production = data['currentActivations']['production']['latest']['policyVersion']
+            try:
+                staging = data['currentActivations']['staging']['latest']['policyVersion']
+            except:
+                staging = 0
+            try:
+                production = data['currentActivations']['production']['latest']['policyVersion']
+            except:
+                production = 0
             name = data['name']
             header = f'Policy ID ({policy_id}) version'
             policy_info.append({header: staging, 'network': 'staging'})
@@ -97,14 +103,19 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
         response = session.get(self.form_url(url))
         if response.status_code == 200:
+
             data = response.json()['content']
-            columns = ['network', 'property name', 'property version']
-            df = pd.DataFrame(data)
-            df['network'] = df['network'].apply(str.lower)
-            df.sort_values(by='network', ascending=False, inplace=True)
-            df.rename(columns={'name': 'property name',
-                               'version': 'property version'}, inplace=True)
-            return df[columns]
+            if data:
+                columns = ['network', 'property name', 'property version']
+                df = pd.DataFrame(data)
+                df['network'] = df['network'].apply(str.lower)
+                df.sort_values(by='network', ascending=False, inplace=True)
+                df.rename(columns={'name': 'property name',
+                                'version': 'property version'}, inplace=True)
+                return df[columns]
+            else:
+                print('no active property')
+                return pd.DataFrame()
 
     def list_policies_offset(self,
                       session,
