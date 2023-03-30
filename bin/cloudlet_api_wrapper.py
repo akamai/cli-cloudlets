@@ -52,13 +52,16 @@ class Cloudlet:
         response = session.get(self.form_url(url))
         if response.status_code == 200:
             data = response.json()['content']
+
             df = pd.DataFrame(data)
             df = df[df['name'] == policy_name]
+
             if not df.empty:
                 id = df['id'].values[0]
-                _, policy_info = self.list_shared_policies_by_id(session, policy_id=id)
-                return id, policy_info
-        return None, None
+
+                _, policy_info, full_policy_detail = self.list_shared_policies_by_id(session, policy_id=id)
+                return id, policy_info, full_policy_detail
+        return None, None, None
 
     def list_shared_policies_by_id(self, session, policy_id: int) -> tuple:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}'
@@ -66,20 +69,20 @@ class Cloudlet:
         name = None
         policy_info = []
         if response.status_code == 200:
-            data = response.json()
+            full_policy_detail = response.json()
             try:
-                staging = data['currentActivations']['staging']['latest']['policyVersion']
+                staging = full_policy_detail['currentActivations']['staging']['latest']['policyVersion']
             except:
                 staging = 0
             try:
-                production = data['currentActivations']['production']['latest']['policyVersion']
+                production = full_policy_detail['currentActivations']['production']['latest']['policyVersion']
             except:
                 production = 0
-            name = data['name']
+            name = full_policy_detail['name']
             header = f'Policy ID ({policy_id}) version'
             policy_info.append({header: staging, 'network': 'staging'})
             policy_info.append({header: production, 'network': 'production'})
-        return name, policy_info
+        return name, policy_info, full_policy_detail
 
     def list_shared_policy_versions(self, session, policy_id: int) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'

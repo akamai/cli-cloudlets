@@ -501,7 +501,7 @@ def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, no
 @click.option('--new-group-id', metavar='', help='Group Id of new policy', required=False)
 @click.option('--new-policy', metavar='', help='New Policy Name', required=True)
 @pass_config
-def clone_apiv2(config, version, policy_id, policy, notes, new_group_name, new_group_id, new_policy):
+def clone_api_v2(config, version, policy_id, policy, notes, new_group_name, new_group_id, new_policy):
     """
     Clone policy from an existing policy
     """
@@ -908,6 +908,47 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
         root_logger.info(json.dumps(retrieve_response.json(), indent=4))
         exit(-1)
     return 0
+
+
+@cli.command(short_help='Retrieve shared policy detail version')
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
+@click.option('--version', metavar='', help='Policy version number', required=False)
+@click.option('--policy-id', metavar='', help='Policy Id', required=False)
+@click.option('--policy', metavar='', help='Policy Name', required=False)
+@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, required=False)
+@pass_config
+def retrieve_shared_policy(config, optjson, version, policy_id, policy, only_match_rules):
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    if policy:
+        root_logger.info(f'...searching for cloudlet policy {policy}')
+        id, policy_info, full_policy_detail = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
+    else:
+        id = policy_id
+        root_logger.info(f'...searching for cloudlet policy-id {id}')
+        name, policy_info, full_policy_detail = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
+        print(f'Policy Name: {name}') if name else None
+
+    df = pd.json_normalize(full_policy_detail)
+    df.rename(columns={'id': 'policyId',
+                       'modifiedBy': 'lastModifiedBy'}, inplace=True)
+    columns = ['name', 'policyId', 'description', 'lastModifiedBy']
+    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
+
+    if not policy_info:
+        root_logger.info('Not found')
+    else:
+        df = pd.DataFrame(policy_info)
+        staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
+        production = df.loc[df['network'] == 'production'].iloc[0, 0]
+
+        df = cloudlet_object.get_active_properties(session, policy_id=id)
+        if not df.empty:
+            df['policy version'] = df.apply(lambda row: fill_column(row, staging, production), axis=1)
+            new_header = f'Policy ID ({policy_id}) version'
+            df.rename(columns={'policy version': new_header}, inplace=True)
+            columns = [new_header, 'network', 'property name', 'property version']
+            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
 
 def get_prog_name():
