@@ -42,7 +42,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.0.1'
+PACKAGE_VERSION = '1.1.1'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -110,8 +110,8 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
-@click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'), help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
-@click.option('--section', metavar='', help='Section of the credentials file [$AKAMAI_EDGERC_SECTION]', required=False)
+@click.option('-e', '--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'), help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
+@click.option('-s', '--section', metavar='', help='Section of the credentials file [$AKAMAI_EDGERC_SECTION]', required=False)
 @click.option('-a', '--account-key', metavar='', help='Account Key', required=False)
 @click.version_option(version=PACKAGE_VERSION)
 @pass_config
