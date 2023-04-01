@@ -52,13 +52,10 @@ class Cloudlet:
         response = session.get(self.form_url(url))
         if response.status_code == 200:
             data = response.json()['content']
-
             df = pd.DataFrame(data)
             df = df[df['name'] == policy_name]
-
             if not df.empty:
                 id = df['id'].values[0]
-
                 _, policy_info, full_policy_detail = self.list_shared_policies_by_id(session, policy_id=id)
                 return id, policy_info, full_policy_detail
         return None, None, None
@@ -106,7 +103,6 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
         response = session.get(self.form_url(url))
         if response.status_code == 200:
-
             data = response.json()['content']
             if data:
                 columns = ['network', 'property name', 'property version']
@@ -120,28 +116,11 @@ class Cloudlet:
                 print('no active property')
                 return pd.DataFrame()
 
-    def list_policies_offset(self,
-                      session,
-                      offset,
-                      page_size):
-        """
-        Function to fetch policies from offset and page size
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        policies_response : policies_response
-            Policies of cloudlet Id
-        """
+    def list_policies_offset(self, session, offset, page_size):
+        """ Function to fetch policies from offset and page size"""
         policies_response = None
-        policies_url = 'https://' + self.access_hostname + \
-                           '/cloudlets/api/v2/policies?offset=' + str(offset) + '&pageSize=' + str(page_size)
-
-        policies_response = session.get(self.form_url(policies_url))
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies?offset={offset}&pageSize={page_size}'
+        policies_response = session.get(self.form_url(url))
         return policies_response
 
     def clone_policy(self, session, name: str, policy_id: int, group_id: int, version: list | None = None):
@@ -156,44 +135,21 @@ class Cloudlet:
         response = session.post(self.form_url(url), json=payload, headers=headers)
         return response
 
-    def create_clone_policy(
-            self,
-            session,
-            data,
-            clone_policy_id='optional',
-            version='optional'):
-        """
-        Function to clone a policy version
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        cloudlet_policy_create_response : cloudlet_policy_create_response
-            Json object details of created cloudlet policy version
-        """
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
-        cloudlet_policy_create_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/'
-
+    def create_clone_policy(self, session, data, clone_policy_id='optional', version='optional'):
+        """Function to clone a policy version"""
+        headers = {'Content-Type': 'application/json'}
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/'
         if clone_policy_id != 'optional':
-            cloudlet_policy_create_url = cloudlet_policy_create_url + '?clonePolicyId=' + str(clone_policy_id)
-
+            url = f'{url}?clonePolicyId={clone_policy_id}'
         if version != 'optional':
             symbol = '?'
-            if '?' in cloudlet_policy_create_url:
+            if '?' in url:
                 symbol = '&'
-                cloudlet_policy_create_url = cloudlet_policy_create_url + symbol + 'version=' + str(version)
-
-        cloudlet_policy_create_response = session.post(self.form_url(cloudlet_policy_create_url), data=data, headers=headers)
+                url = f'{url}{symbol}version={version}'
+        cloudlet_policy_create_response = session.post(self.form_url(url), data=data, headers=headers)
         return cloudlet_policy_create_response
 
-    def create_shared_policy(self, session, name: str, cloudlet_type: str,
+    def create_shared_policy(self, session, name: str, type: str,
                              group_id: int,
                              notes: str):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies'
@@ -202,210 +158,135 @@ class Cloudlet:
         if notes is None:
             notes = 'Created by Cloudlet CLI'
         payload = {'name': name,
-                   'cloudletType': cloudlet_type,
+                   'cloudletType': type,
                    'groupId': group_id,
                    'description': notes,
                    'policyType': 'SHARED'
                   }
         response = session.post(self.form_url(url), json=payload, headers=headers)
-        return response
+        if response.status_code == 201:
+            policy_id = response.json()['id']
+            version_response = self.create_shared_policy_version(session, policy_id, type)
+            if version_response.status_code == 201:
+                try:
+                    policy_version = version_response.json()['version']
+                    return None, policy_id, policy_version
+                except:
+                    return version_response, policy_id, policy_version
+            else:
+                return version_response, policy_id, None
+        return response, None, None
 
-    def get_policy(self,
-                   session,
-                   policy_id):
-        """
-        Function to fetch a cloudlet policy detail
+    def create_shared_policy_version(self, session, policy_id: int, name: str, notes: str | None = None):
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'}
+        if notes is None:
+            notes = 'Created by Cloudlet CLI'
+        payload = {'configuration': {'originNewVisitorLimit': 1000},
+                   'description': notes,
+                   'matchRules': [{'type': 'erMatchRule',
+                                    'disabled': False,
+                                    'matchesAlways': True,
+                                    'redirectURL': 'none',
+                                    'statusCode': 307,
+                                    'useIncomingQueryString': True,
+                                    'useIncomingSchemeAndHost': True,
+                                    'useRelativeUrl': 'relative_url'
+                                   }
+                                  ]
+                   }
+        version_response = session.post(self.form_url(url), json=payload, headers=headers)
+        return version_response
 
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
+    def delete_shared_policy(self, session, policy_id: int):
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}'
+        headers = {'accept': 'application/problem+json'}
+        response = session.delete(self.form_url(url), headers=headers)
+        if response.status_code == 204:
+            return True
+        else:
+            print_json(data=response.json())
+            return False
 
-        Returns
-        -------
-        cloudlet_policy_response : cloudlet_policy_response
-            Json object details of specific cloudlet policy
-        """
-
-        policy_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/' + \
-                              str(policy_id)
-
-        policy_response = session.get(self.form_url(policy_url))
+    def get_policy(self, session, policy_id):
+        """ Function to fetch a cloudlet policy detail"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}'
+        policy_response = session.get(self.form_url(url))
         return policy_response
 
-    def list_policy_versions(self,
-                            session,
-                            policy_id,
-                            page_size='optional'):
-        """
-        Function to fetch a cloudlet policy versions
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        cloudletPolicyResponse : cloudletPolicyResponse
-            Json object details of specific cloudlet policy versions
-        """
+    def list_policy_versions(self, session, policy_id, page_size='optional'):
+        """Function to fetch a cloudlet policy versions"""
         if page_size == 'optional':
-            cloudlet_policy_versions_url = 'https://' + self.access_hostname + \
-                                           '/cloudlets/api/v2/policies/' + str(
-                                               policy_id) + '/versions?includeRules=true'
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true'
         else:
-            cloudlet_policy_versions_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/' + \
-                                           str(policy_id) + '/versions?includeRules=true&pageSize=' + str(page_size)
-
-        cloudlet_policy_versions_response = session.get(self.form_url(cloudlet_policy_versions_url))
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true&pageSize={page_size}'
+        cloudlet_policy_versions_response = session.get(self.form_url(url))
         return cloudlet_policy_versions_response
 
-    def get_policy_version(self,
-                           session,
-                           policy_id,
-                           version):
-        """
-        Function to fetch a cloudlet policy detail
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        cloudlet_policy_response : cloudlet_policy_response
-            Json object details of specific cloudlet policy
-        """
-
-        policy_version_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/' + \
-                              str(policy_id) + '/versions/' + str(version) + '?omitRules=false'
-
-        policy_version_response = session.get(self.form_url(policy_version_url))
+    def get_policy_version(self, session, policy_id, version):
+        """Function to fetch a cloudlet policy detail"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}?omitRules=false'
+        policy_version_response = session.get(self.form_url(url))
         return policy_version_response
 
-    def create_clone_policy_version(
-            self,
-            session,
-            policy_id,
-            data=dict(),
-            clone_version='optional'):
-        """
-        Function to create a policy version
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        cloudlet_policy_create_response : cloudlet_policy_create_response
-            Json object details of created cloudlet policy version
-        """
-        headers = {
-            'Content-Type': 'application/json'
-        }
+    def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version='optional'):
+        """Function to create a policy version"""
+        headers = {'Content-Type': 'application/json'}
         if clone_version == 'optional':
-            cloudlet_policy_create_url = 'https://' + self.access_hostname + \
-                '/cloudlets/api/v2/policies/' + str(policy_id) + '/versions' + '?includeRules=true'
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true'
         else:
-            cloudlet_policy_create_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/' + \
-                str(policy_id) + '/versions' + '?includeRules=true&cloneVersion=' + clone_version
-
-        cloudlet_policy_create_response = session.post(self.form_url(cloudlet_policy_create_url), data, headers=headers)
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true&cloneVersion={clone_version}'
+        cloudlet_policy_create_response = session.post(self.form_url(url), data, headers=headers)
         return cloudlet_policy_create_response
 
-    def update_policy_version(
-            self,
-            session,
-            policy_id,
-            version,
-            data=dict()):
-        """
-        Function to update a policy version
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        update_policy_version_response : update_policy_version_response
-            Json object details of updated cloudlet policy version
-        """
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
-        update_policy_version_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/' + \
-            str(policy_id) + '/versions/' + str(version)
-
-        update_policy_version_response = session.put(self.form_url(update_policy_version_url), data, headers=headers)
+    def update_policy_version(self, session, policy_id, version, data=dict()):
+        """Function to update a policy version"""
+        headers = {'Content-Type': 'application/json'}
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}'
+        update_policy_version_response = session.put(self.form_url(url), data, headers=headers)
         return update_policy_version_response
 
-    def activate_policy_version(
-            self,
-            session,
-            policy_id,
-            version,
-            additionalPropertyNames=[],
-            network='staging'):
-        """
-        Function to activate a policy version
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-
-        Returns
-        -------
-        cloudlet_policy_activate_response : cloudlet_policy_activate_response
-            Json object details of activated cloudlet policy version
-        """
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
+    def activate_policy_version(self, session, policy_id, version, additionalPropertyNames=[], network='staging'):
+        """Function to activate a policy version"""
+        headers = {'Content-Type': 'application/json'}
         data = dict()
         data['network'] = network
         data['additionalPropertyNames'] = additionalPropertyNames
-
-        cloudlet_policy_activate_url = 'https://' + self.access_hostname + \
-            '/cloudlets/api/v2/policies/' + str(policy_id) + '/versions/' + str(version) + '/activations'
-
-        cloudlet_policy_activate_response = session.post(self.form_url(cloudlet_policy_activate_url), json.dumps(data), headers=headers)
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}/activations'
+        cloudlet_policy_activate_response = session.post(self.form_url(url), json.dumps(data), headers=headers)
         return cloudlet_policy_activate_response
 
-    def list_policy_activations(self,
-                           session,
-                           policy_id,
-                           network):
-        """
-        Function to fetch activation details of policy
-
-        Parameters
-        -----------
-        session : <string>
-            An EdgeGrid Auth akamai session object
-        policy_id : <integer>
-            A policy Id
-        network : <string>
-            staging pr production
-        Returns
-        -------
-        policy_activations_response : policy_activations_response
-            Json object details of activation history
-        """
-
-        policy_activations_url = 'https://' + self.access_hostname + '/cloudlets/api/v2/policies/' + \
-                              str(policy_id) + '/activations?network=' + str(network)
-
-        policy_activations_response = session.get(self.form_url(policy_activations_url))
+    def list_policy_activations(self, session, policy_id, network):
+        """Function to fetch activation details of policy"""
+        url = f'https:///cloudlets/api/v2/policies/{policy_id}/activations?network={network}'
+        policy_activations_response = session.get(self.form_url(url))
         return policy_activations_response
+
+    def available_shared_policies(self, session) -> pd.DataFrame:
+        url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            df = pd.DataFrame(data=response.json())
+            df.rename(columns={'cloudletType': 'Abbreviation',
+                                'cloudletName': 'Cloudlet Name'}, inplace=True)
+            return df[['Cloudlet Name', 'Abbreviation']]
+
+    def activate_shared_policy(self, session, network: str, policy_id: int, version: int) -> pd.DataFrame:
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
+        payload = {'network': network,
+                   'operation': 'ACTIVATION',
+                   'policyVersion': version
+                  }
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'
+                  }
+        response = session.post(self.form_url(url), json=payload, headers=headers)
+        if response.status_code == 202:
+            df = pd.DataFrame(data=response.json())
+            return df
+        else:
+            print(response.text)
 
     def form_url(self, url):
         # This is to ensure accountSwitchKey works for internal users
