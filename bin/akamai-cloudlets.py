@@ -655,49 +655,42 @@ def update(config, policy_id, policy, notes, version, file):
 
     # get policy
     if policy:
-        root_logger.info('...searching for cloudlet policy ' + str(policy_name))
+        root_logger.info(f'...searching for cloudlet policy {policy_name}')
         policy_info = utility_object.get_policy_by_name(session, cloudlet_object, policy_name, root_logger)
     else:
-        root_logger.info('...searching for cloudlet policy-id ' + str(policy_id))
+        root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
         policy_info = utility_object.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
 
     try:
         policy_id = policy_info['policyId']
         policy_name = policy_info['name']
-        root_logger.info('...found policy-id ' + str(policy_id))
+        root_logger.info(f'...found policy-id {policy_id}')
     except:
         root_logger.info('ERROR: Unable to find existing policy')
         exit(-1)
 
-    try:
+    if file:
         with open(file) as update_content:
             update_json_content = json.load(update_content)
-    except:
-        root_logger.info('ERROR: unable to read --file')
-        exit(-1)
 
     # if there is no description field in <FILE>, then update it with --notes argument or use default description
     if notes:
-        description = notes
-    else:
-        if 'description' not in update_json_content:
-            description = ''
-        else:
-            description = update_json_content['description']
-    update_json_content['description'] = description
+        update_json_content = {'description': notes}
 
     if version:
         # update the provided version
-        root_logger.info('Updating policy ' + str(policy_name) + ' v' + str(version))
-        update_response = cloudlet_object.update_policy_version(session, policy_id, version, json.dumps(update_json_content))
+        update_response = cloudlet_object.update_policy_version(session, policy_id, version, data=update_json_content)
+        if update_response.status_code == 400:
+            print_json(data=update_response.json())
+        else:
+            root_logger.info(f'Updating policy {policy_name} v{version}')
     else:
         # create and update a new version
-        root_logger.info('Updating policy ' + str(policy_name))
         update_response = cloudlet_object.create_clone_policy_version(session, policy_id, json.dumps(update_json_content))
 
     if update_response.status_code == 201:
-        # return version number that was just created
-        print(str(update_response.json()['version']))
+        version = update_response.json()['version']
+        root_logger.info(f'create and update a new version {version}')
     elif update_response.status_code == 200:
         root_logger.info('Successfully updated policy version')
     else:

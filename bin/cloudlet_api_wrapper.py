@@ -240,12 +240,41 @@ class Cloudlet:
         cloudlet_policy_create_response = session.post(self.form_url(url), data, headers=headers)
         return cloudlet_policy_create_response
 
-    def update_policy_version(self, session, policy_id, version, data=dict()):
-        """Function to update a policy version"""
-        headers = {'Content-Type': 'application/json'}
+    def update_policy_version(self, session, policy_id, version, data: dict):
+        """
+        Function to update a policy version
+        Only unlock version can be updated
+        """
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'
+                  }
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}'
-        update_policy_version_response = session.put(self.form_url(url), data, headers=headers)
+
+        update_policy_version_response = session.put(self.form_url(url), json=data, headers=headers)
+
         return update_policy_version_response
+
+    def get_schema(self, session, cloudlet_type: str):
+        headers = {'accept': 'application/json'}
+
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
+        response = session.get(self.form_url(url), headers=headers)
+        df = pd.DataFrame(response.json())
+        columns = ['cloudletName', 'cloudletCode', 'scopes']
+        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
+        response = session.get(self.form_url(url), headers=headers)
+        df = pd.DataFrame(response.json()['schemas'])
+        columns = ['title', 'endpoint']
+        df.rename(columns={'location': 'endpoint'}, inplace=True)
+        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-nimbus_policy_version-ER-1.0.json'
+        response = session.get(self.form_url(url), headers=headers)
+        df = pd.DataFrame(response.json())
+        df = df[df['properties'].notna()]
+        print(tabulate(df[['properties']], headers='keys', showindex=True, tablefmt='psql'))
 
     def activate_policy_version(self, session, policy_id, version, additionalPropertyNames=[], network='staging'):
         """Function to activate a policy version"""
