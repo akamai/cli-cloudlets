@@ -249,10 +249,51 @@ class Cloudlet:
                    'content-type': 'application/json'
                   }
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}'
-
         update_policy_version_response = session.put(self.form_url(url), json=data, headers=headers)
-
         return update_policy_version_response
+
+    def update_shared_policy(self, session, policy_id: int, group_id: int, notes: str | None = None):
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}'
+        if notes is None:
+            notes = 'CLI cloudlet update'
+
+        payload = {
+            'groupId': group_id,
+            'description': notes
+        }
+        headers = {
+            'accept': 'application/json',
+            'content-type': 'application/json'
+        }
+
+        response = session.put(self.form_url(url), json=payload, headers=headers)
+        return response
+
+    def update_shared_policy_detail(self, session, policy_id: int, version: int, notes: str | None = None):
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions/{version}'
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'
+                  }
+        if notes is None:
+            notes = 'CLI cloudlet update'
+
+        payload = {'configuration': {'originNewVisitorLimit': 1000},
+                   'description': notes,
+                   'matchRules': [{'type': 'erMatchRule',
+                                   'disabled': False,
+                                   'end': 0,
+                                   'name': 'Redirect images',
+                                   'matchURL': '/images/*',
+                                   'redirectURL': '/static/images/*',
+                                   'start': 0,
+                                   'statusCode': 302,
+                                   'useIncomingQueryString': True,
+                                   'useRelativeUrl': 'relative_url'
+                                  }
+                                 ],
+                  }
+        response = session.put(self.form_url(url), json=payload, headers=headers)
+        return response
 
     def get_schema(self, session, cloudlet_type: str):
         headers = {'accept': 'application/json'}
@@ -260,15 +301,18 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
         response = session.get(self.form_url(url), headers=headers)
         df = pd.DataFrame(response.json())
-        columns = ['cloudletName', 'cloudletCode', 'scopes']
-        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+        df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
+        columns = ['name', 'code']
+        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
         response = session.get(self.form_url(url), headers=headers)
         df = pd.DataFrame(response.json()['schemas'])
-        columns = ['title', 'endpoint']
-        df.rename(columns={'location': 'endpoint'}, inplace=True)
-        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+        df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
+        columns = ['action', 'endpoint']
+        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-nimbus_policy_version-ER-1.0.json'
         response = session.get(self.form_url(url), headers=headers)
@@ -297,9 +341,9 @@ class Cloudlet:
         response = session.get(self.form_url(url))
         if response.status_code == 200:
             df = pd.DataFrame(data=response.json())
-            df.rename(columns={'cloudletType': 'Abbreviation',
-                                'cloudletName': 'Cloudlet Name'}, inplace=True)
-            return df[['Cloudlet Name', 'Abbreviation']]
+            df.rename(columns={'cloudletType': 'code',
+                                'cloudletName': 'name'}, inplace=True)
+            return df[['name', 'code']]
 
     def activate_shared_policy(self, session, network: str, policy_id: int, version: int) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'

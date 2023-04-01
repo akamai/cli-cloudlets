@@ -493,7 +493,7 @@ def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, no
                 root_logger.info(f'ERROR: Unable to create policy  {policy_id}')
 
 
-@cli.command(short_help='Deprecated')
+@cli.command(short_help='Clone policy using API v2 [Deprecated]')
 @click.option('--version', metavar='', help='Policy version number', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
@@ -605,7 +605,7 @@ def clone_api_v2(config, version, policy_id, policy, notes, new_group_name, new_
     return 0
 
 
-@cli.command(short_help='Clone policy from an existing policy using API v3')
+@cli.command(short_help='Clone policy using API v3')
 @click.option('--policy-id', metavar='', type=int, help='Policy Id', required=True)
 @click.option('--version', metavar='', cls=PythonLiteralOption, help='Policy version numbers to be cloned from i.e. [1] or [1,2,3]', default=[], required=False)
 @click.option('--group-id', metavar='', type=int, help='Group ID of new policy', required=True)
@@ -699,6 +699,39 @@ def update(config, policy_id, policy, notes, version, file):
         exit(-1)
 
     return 0
+
+
+@cli.command(short_help='Update new shared policy version with rules')
+@click.option('-g', '--group_id', metavar='', help='Group ID without ctr_ prefix', required=False)
+@click.option('--policy-id', metavar='', help='Policy Id', required=False)
+@click.option('--policy', metavar='', help='Policy Name', required=False)
+@click.option('--notes', metavar='', help='Policy version notes', required=False)
+@click.option('--version', metavar='', help='Policy version to update otherwise creates new version', required=False)
+@click.option('--file', metavar='', help='JSON file with policy data', required=False)
+@pass_config
+def update_share(config, group_id, policy_id, policy, notes, version, file):
+    """
+    Update new policy version with rules
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+
+    if policy:
+        policy_name = policy
+        id, _, _ = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
+
+    if policy_id:
+        policy_name, _, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id)
+    else:
+        policy_id = id
+
+    if version:
+        update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
+        if update_response.status_code == 400:
+            print_json(data=update_response.json())
+        else:
+            root_logger.info(f'Updating policy {policy_name} v{version}')
 
 
 @cli.command(short_help='Activate policy version')
@@ -947,7 +980,7 @@ def retrieve_shared_policy(config, optjson, version, policy_id, policy, only_mat
 
 @cli.command(short_help='Cloudlets that you can create a shared policy')
 @pass_config
-def available_shared_policy(config):
+def available_shared_policies(config):
     """Cloudlets that you can create a shared policy"""
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -966,6 +999,15 @@ def activate_shared_policy(config, network, policy_id, version):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     df = cloudlet_object.activate_shared_policy(session, network, policy_id, version)
     print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+
+
+@cli.command(short_help='Cloudlet policies API endpoints')
+@click.option('--cloudlet-type', metavar='', help='cloudlet type', required=True)
+@pass_config
+def available_policy_endpoints(config, cloudlet_type: str):
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_schema(session, cloudlet_type)
 
 
 def get_prog_name():
