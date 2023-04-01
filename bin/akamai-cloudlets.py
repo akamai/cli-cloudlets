@@ -117,7 +117,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Cloudlets
+    Akamai CLI for Cloudlets 1.1.1
     '''
     config.edgerc = edgerc
     config.section = section
@@ -483,13 +483,14 @@ def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, no
                 root_logger.info(f'ERROR: Unable to find group: {group_name}')
                 exit(-1)
 
-    response = cloudlet_object.create_shared_policy(session, name=policy, cloudlet_type=cloudlet_type, group_id=group_id, notes=notes)
-    if response.status_code == 201:
-        print(f'Policy {response.json()["id"]} created successfully')
-    else:
-        root_logger.info('ERROR: Unable to create policy')
-        root_logger.info(json.dumps(response.json(), indent=4))
-        exit(-1)
+    response, policy_id, policy_version = cloudlet_object.create_shared_policy(session, name=policy, type=cloudlet_type, group_id=group_id, notes=notes)
+    if policy_id:
+        if policy_version:
+            print(f'Policy ID {policy_id}, version {policy_version} created successfully')
+        else:
+            print_json(data=response.json())
+            if cloudlet_object.delete_shared_policy(session, policy_id=policy_id):
+                root_logger.info(f'ERROR: Unable to create policy  {policy_id}')
 
 
 @cli.command(short_help='Deprecated')
@@ -949,6 +950,29 @@ def retrieve_shared_policy(config, optjson, version, policy_id, policy, only_mat
             df.rename(columns={'policy version': new_header}, inplace=True)
             columns = [new_header, 'network', 'property name', 'property version']
             print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+
+@cli.command(short_help='Cloudlets that you can create a shared policy')
+@pass_config
+def available_shared_policy(config):
+    """Cloudlets that you can create a shared policy"""
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    df = cloudlet_object.available_shared_policies(session)
+    print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+
+
+@cli.command(short_help='Activate shared policy version')
+@click.option('-n', '--network', metavar='', help='STAGING, PRODUCTION', required=True)
+@click.option('-p', '--policy-id', metavar='', help='Policy Id', required=True)
+@click.option('--version', metavar='', help='Policy version number', required=True)
+@pass_config
+def activate_shared_policy(config, network, policy_id, version):
+    """Cloudlets that you can create a shared policy"""
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    df = cloudlet_object.activate_shared_policy(session, network, policy_id, version)
+    print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
 
 
 def get_prog_name():
