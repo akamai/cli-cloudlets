@@ -84,11 +84,17 @@ class Cloudlet:
     def list_shared_policy_versions(self, session, policy_id: int) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
         response = session.get(self.form_url(url))
+
         if response.status_code == 200:
-            df = pd.DataFrame(data=response.json()['content'])
-            columns = ['id', 'description', 'version', 'modifiedDate']
+            data = response.json()['content']
+            # print_json(data=data)
+            df = pd.DataFrame(data)
+            df.rename(columns={'description': 'version notes',
+                               'immutable': 'lock'}, inplace=True)
+            columns = ['version', 'version notes', 'createdBy', 'modifiedDate', 'lock']
             df.sort_values(by='version', ascending=False, inplace=True)
-            return df[columns]
+            version = response.json()['content'][0]['version']
+            return df[columns], version
 
     def list_shared_policy_activations(self, session, policy_id: int) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
@@ -110,7 +116,7 @@ class Cloudlet:
                 df['network'] = df['network'].apply(str.lower)
                 df.sort_values(by='network', ascending=False, inplace=True)
                 df.rename(columns={'name': 'property name',
-                                'version': 'property version'}, inplace=True)
+                                   'version': 'property version'}, inplace=True)
                 return df[columns]
             else:
                 print('no active property')
@@ -209,13 +215,14 @@ class Cloudlet:
             print_json(data=response.json())
             return False
 
-    def get_policy(self, session, policy_id):
+    def get_policy(self, session, policy_id: int):
         """ Function to fetch a cloudlet policy detail"""
+        headers = {'accept': 'application/json'}
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}'
-        policy_response = session.get(self.form_url(url))
+        policy_response = session.get(self.form_url(url), headers=headers)
         return policy_response
 
-    def list_policy_versions(self, session, policy_id, page_size='optional'):
+    def list_policy_versions(self, session, policy_id: int, page_size='optional'):
         """Function to fetch a cloudlet policy versions"""
         if page_size == 'optional':
             url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true'
@@ -229,6 +236,19 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}?omitRules=false'
         policy_version_response = session.get(self.form_url(url))
         return policy_version_response
+
+    def get_shared_policy_version(self, session, policy_id: int, version: int):
+        """Function to fetch a cloudlet policy detail"""
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions/{version}'
+        policy_version_response = session.get(self.form_url(url))
+        transposed_df = pd.DataFrame()
+        if policy_version_response.status_code == 200:
+            policy_version = policy_version_response.json()
+            policy = {k: policy_version[k] for k in ('policyId', 'version', 'description', 'modifiedBy', 'modifiedDate')}
+            df = pd.DataFrame.from_dict(policy, orient='index')
+            df.rename(columns={'description': 'notes'}, inplace=True)
+            transposed_df = df.T
+        return transposed_df
 
     def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version='optional'):
         """Function to create a policy version"""

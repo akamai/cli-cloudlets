@@ -231,67 +231,189 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
     root_logger.info(f'{len(df.index)} policies found')
 
 
-'''
-@cli.command(short_help='List shared policies')
+@cli.command(short_help='Retrieve policy detail version')
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
-@click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
-@click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
-@click.option('--name-contains', metavar='', help='String to use for searching for policies by name', required=False)
+@click.option('--version', metavar='', help='Policy version number', required=False)
+@click.option('--policy-id', metavar='', type=int, help='Policy Id', required=False)
+@click.option('--policy', metavar='', help='Policy Name', required=False)
+@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, required=False)
 @pass_config
-def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
+def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
     """
-    List Share Policies
+    Retrieve policy version
     """
     base_url, session = init_config(config.edgerc, config.section)
-
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
-    cloudlet_type = cloudlet_type
-    name_contains = name_contains
-    if cloudlet_type:
-        if cloudlet_type.upper() not in utility_object.do_cloudlet_code_map().keys():
-            root_logger.info(f'ERROR: {cloudlet_type} is not a valid cloudlet type code')
-            keys = []
-            for key in utility_object.do_cloudlet_code_map():
-                keys.append(key)
-            print(f'Cloudlet Type Codes: {keys}')
-            exit(-1)
+    utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
+    _, policy_id, _ = utility_object.validate_policy_arguments(session, root_logger,
+                                                               cloudlet_object,
+                                                               policy_name=policy,
+                                                               policy_id=policy_id)
+
+    if version:
+        retrieve_response = cloudlet_object.get_policy_version(session, policy_id, version)
+        if retrieve_response.status_code != 200:
+            # shared policy
+            df = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            if not df.empty:
+                print(tabulate(df, headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            else:
+                root_logger.info('ERROR: Unable to retrieve version')
         else:
-            utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
+            if only_match_rules:
+                # retrieve only matchRules section and strip out location akaRuleId
+                matchRules = []
+                try:
+                    for every_match_rule in retrieve_response.json()['matchRules']:
+                        if 'location' in every_match_rule:
+                            del every_match_rule['location']
+                        if 'akaRuleId' in every_match_rule:
+                            del every_match_rule['akaRuleId']
+                        matchRules.append(every_match_rule)
 
-    root_logger.info('...fetching policy list')
-    policies_data = cloudlet_object.list_shared_policies(session)
-    if not policies_data:
-        root_logger.info('ERROR: Unable to fetch policy list')
-        root_logger.info(json.dumps(policies_data.json(), indent=4))
-        exit(-1)
+                    if optjson:
+                        print_json(json.dumps({'matchRules': matchRules}))
+                    else:
+                        df = pd.DataFrame(matchRules)
+                        columns = ['name', 'redirectURL', 'statusCode', 'useIncomingQueryString', 'useRelativeUrl']
+                        matchURL = df['matchURL'].unique().tolist()
+                        if len(matchURL) > 1:
+                            columns.append('matchURL')
+                        df.fillna('', inplace=True)
+                        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-    df = pd.DataFrame(policies_data)
-    df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name', 'cloudletType': 'Type', 'groupId': 'Group ID'}, inplace=True)
-    df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID']]
-    df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
-    df.reset_index(drop=True, inplace=True)
+                        df = pd.DataFrame(matchRules)
+                        columns = []
+                        id = df['id'].unique().tolist()
+                        start = df['start'].unique().tolist()
+                        end = df['end'].unique().tolist()
+                        if len(id) > 1:
+                            columns.append('id')
+                        if len(start) > 1:
+                            columns.append('start')
+                        if len(end) > 1:
+                            columns.append('end')
+                        columns.append('matches')
+                        df.replace(np.nan, '', regex=True, inplace=True)
+                        match_df = pd.DataFrame(df['matches'].tolist()[0])
+                        columns = ['matchType', 'matchValue', 'matchOperator', 'negate', 'caseSensitive']
+                        print(tabulate(match_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                except:
+                    root_logger.info('ERROR: Unable to retrieve matchRules')
+            else:
+                if optjson:
+                    print_json(json.dumps(retrieve_response.json()))
+                else:
+                    df = pd.DataFrame.from_dict(retrieve_response.json(), orient='index')
+                    transposed_df = df.T
+                    transposed_df.rename(columns={'description': 'notes'}, inplace=True)
+                    columns = ['policyId', 'version', 'notes', 'lastModifiedBy']
+                    print(tabulate(transposed_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                    '''
+                    network_df = pd.DataFrame(transposed_df['activations'].tolist()[0])
+                    activation_df = pd.DataFrame.from_records(network_df['propertyInfo'].values)
+                    activation_df['activationDate'] = pd.to_datetime(activation_df['activationDate'])
+                    # property_df['activationDate'] = property_df['activationDate'].tz_localize('UTC')
+                    property_df = pd.concat([activation_df, network_df['network']], axis = 1)
+                    property_df.rename(columns={'name': 'property name', 'version': 'property version', 'groupId': 'group id'}, inplace=True)
+                    columns = [ 'property name', 'property version', 'network', 'status', 'activatedBy', 'group id']
+                    print(tabulate(property_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-    if name_contains:  # check whether user passed a filter
-        df = df[df['Policy Name'].str.contains(name_contains, case=False)]
-        df.reset_index(drop=True, inplace=True)
-
-    if cloudlet_type:  # only searching by cloudlet type
-        df = df[df['Type'] == cloudlet_type.upper()]
-        df.reset_index(drop=True, inplace=True)
-
-    if optjson:
-        print_json(df.to_json(orient='records'))
-    elif optcsv:
-        df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
-        with open('temp_output.csv') as f:
-            for line in f:
-                print(line.rstrip())
-        os.remove('temp_output.csv')
+                    network_df = pd.DataFrame(transposed_df['activations'].tolist()[0])
+                    activation_df = pd.DataFrame.from_records(network_df['propertyInfo'].values)
+                    activation_df['activationDate'] = pd.to_datetime(activation_df['activationDate'])
+                    # property_df['activationDate'] = property_df['activationDate'].tz_localize('UTC')
+                    property_df = pd.concat([activation_df, network_df['network']], axis = 1)
+                    property_df.rename(columns={'name': 'property name', 'version': 'property version', 'groupId': 'group id'}, inplace=True)
+                    columns = [ 'property name', 'property version', 'network', 'status', 'activatedBy', 'group id']
+                    print(tabulate(property_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                    '''
     else:
-        print(tabulate(df, headers='keys', tablefmt='psql', showindex=False, numalign='left'))
-    root_logger.info(f'{len(df.index)} shared policies found')
-'''
+        # version not specified, find latest version to use
+        version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
+        if version:
+            retrieve_response = cloudlet_object.get_policy_version(session, policy_id, version)
+            if retrieve_response.status_code != 200:
+                root_logger.info('ERROR: Unable to retrieve version')
+            else:
+                df = pd.DataFrame.from_dict(retrieve_response.json(), orient='index')
+                transposed_df = df.T
+                transposed_df.rename(columns={'description': 'notes'}, inplace=True)
+                columns = ['policyId', 'version', 'notes', 'lastModifiedBy']
+                print(tabulate(transposed_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+                if only_match_rules:
+                    # retrieve only matchRules section and strip out location akaRuleId
+                    matchRules = []
+                    try:
+                        for every_match_rule in retrieve_response.json()['matchRules']:
+                            if 'location' in every_match_rule:
+                                del every_match_rule['location']
+                            if 'akaRuleId' in every_match_rule:
+                                del every_match_rule['akaRuleId']
+                            matchRules.append(every_match_rule)
+
+                        if optjson:
+                            print_json(json.dumps({'matchRules': matchRules}))
+                        else:
+                            df = pd.DataFrame(matchRules)
+                            columns = ['name', 'redirectURL', 'statusCode', 'useIncomingQueryString', 'useRelativeUrl']
+                            matchURL = df['matchURL'].unique().tolist()
+                            if len(matchURL) > 1:
+                                columns.append('matchURL')
+                            df.fillna('', inplace=True)
+                            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+                            df = pd.DataFrame(matchRules)
+                            columns = []
+                            id = df['id'].unique().tolist()
+                            start = df['start'].unique().tolist()
+                            end = df['end'].unique().tolist()
+                            if len(id) > 1:
+                                columns.append('id')
+                            if len(start) > 1:
+                                columns.append('start')
+                            if len(end) > 1:
+                                columns.append('end')
+                            columns.append('matches')
+                            df.replace(np.nan, '', regex=True, inplace=True)
+                            match_df = pd.DataFrame(df['matches'].tolist()[0])
+                            columns = ['matchType', 'matchValue', 'matchOperator', 'negate', 'caseSensitive']
+                            print(tabulate(match_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                    except:
+                        root_logger.info('ERROR: Unable to retrieve matchRules')
+
+                if optjson:
+                    print_json(json.dumps(retrieve_response.json()))
+
+        else:
+            # shared latest version policy
+            _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
+            df = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            if not df.empty:
+                print(tabulate(df, headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+            '''
+            # print(f'{name} {policy_info} {full_policy_detail}')
+            df = pd.DataFrame.from_dict(full_policy_detail, orient='index')
+            transposed_df = df.T
+            columns = ['policyVersion', 'network', 'operation', 'status']
+            network_df = pd.DataFrame(transposed_df['currentActivations'].tolist())
+            staging = network_df['staging'].tolist()[0]
+            staging_dict = staging['effective']
+            staging_df = pd.DataFrame.from_dict(staging_dict, orient='index')
+            transposed_df = staging_df.T
+            print(tabulate(transposed_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+
+            production = network_df['production'].tolist()[0]
+            production_dict = production['effective']
+            production_df = pd.DataFrame.from_dict(production_dict, orient='index')
+            transposed_df = production_df.T
+            print(tabulate(transposed_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            '''
+    return 0
 
 
 @cli.command(short_help='Show status for a specific policy')
@@ -303,33 +425,19 @@ def status(config, policy_id, policy):
     Show status for a specific policy
     """
     base_url, session = init_config(config.edgerc, config.section)
-
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
+    utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
 
-    policy_name = policy
-    policy_id = policy_id
-
-    if policy_id and policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    if not policy_id and not policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    # get policy
-    if policy:
-        root_logger.info('...searching for cloudlet policy ' + str(policy_name))
-        policy_info = utility_object.get_policy_by_name(session, cloudlet_object, policy_name, root_logger)
-    else:
-        root_logger.info('...searching for cloudlet policy-id ' + str(policy_id))
-        policy_info = utility_object.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
+    policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
+                                                               cloudlet_object,
+                                                               policy_name=policy,
+                                                               policy_id=policy_id)
 
     try:
         policy_id = policy_info['policyId']
         policy_name = policy_info['name']
-        root_logger.info('...found policy-id ' + str(policy_id))
+        root_logger.info(f'...found policy-id {policy_id}')
     except:
         root_logger.info('ERROR: Unable to find existing policy')
         exit(-1)
@@ -355,6 +463,7 @@ def status(config, policy_id, policy):
 @pass_config
 def status_share(config, policy_id, policy):
     base_url, session = init_config(config.edgerc, config.section)
+    utility_object = Utility()
 
     if policy_id and policy:
         root_logger.info('Please specify either policy or policy-id')
@@ -382,18 +491,12 @@ def status_share(config, policy_id, policy):
 
         df = cloudlet_object.get_active_properties(session, policy_id)
         if not df.empty:
-            df['policy version'] = df.apply(lambda row: fill_column(row, staging, production), axis=1)
+            df['policy version'] = df.apply(lambda row: utility_object.fill_column(row, staging, production), axis=1)
 
             new_header = f'Policy ID ({policy_id}) version'
             df.rename(columns={'policy version': new_header}, inplace=True)
             columns = [new_header, 'network', 'property name', 'property version']
             print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-
-
-def fill_column(row, staging_version: int, production_version: int):
-    if row['network'] == 'staging':
-        return staging_version
-    return production_version
 
 
 @cli.command(short_help='Create a new policy')
@@ -870,149 +973,6 @@ def activate(config, policy_id, policy, version, add_properties, network):
         root_logger.info(json.dumps(activation_response.json(), indent=4))
         exit(-1)
     return 0
-
-
-@cli.command(short_help='Retrieve policy detail version')
-@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
-@click.option('--version', metavar='', help='Policy version number', required=False)
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, required=False)
-@pass_config
-def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
-    """
-    Retrieve policy version
-    """
-    base_url, session = init_config(config.edgerc, config.section)
-
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    utility_object = Utility()
-    policy_name = policy
-    policy_id = policy_id
-
-    if policy_id and policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    if not policy_id and not policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    # get policy
-    if policy:
-        root_logger.info(f'...searching for cloudlet policy {policy_name}')
-        policy_info = utility_object.get_policy_by_name(session, cloudlet_object, policy_name, root_logger)
-    else:
-        root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
-        policy_info = utility_object.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
-
-    try:
-        policy_id = policy_info['policyId']
-        policy_name = policy_info['name']
-        root_logger.info(f'...found policy-id {policy_id}')
-    except:
-        root_logger.info('ERROR: Unable to find existing policy')
-        exit(-1)
-
-    if version:
-        version = version
-    else:
-        # version not specified, find latest version to use
-        version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
-
-    root_logger.info(f'Retrieving version: {version}')
-    retrieve_response = cloudlet_object.get_policy_version(session, policy_id, version)
-    if retrieve_response.status_code == 200:
-        if only_match_rules:
-            # retrieve only matchRules section and strip out location akaRuleId
-            matchRules = []
-            try:
-                for every_match_rule in retrieve_response.json()['matchRules']:
-                    if 'location' in every_match_rule:
-                        del every_match_rule['location']
-                    if 'akaRuleId' in every_match_rule:
-                        del every_match_rule['akaRuleId']
-                    matchRules.append(every_match_rule)
-                if optjson:
-                    print_json(json.dumps({'matchRules': matchRules}))
-                else:
-                    df = pd.DataFrame(matchRules)
-                    columns = ['name', 'statusCode', 'redirectURL', 'useIncomingQueryString', 'useRelativeUrl']  # , 'useIncomingSchemeAndHost' ]
-                    matchURL = df['matchURL'].unique().tolist()
-                    if len(matchURL) > 1:
-                        columns.append('matchURL')
-                    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-
-                    df = pd.DataFrame(matchRules)
-                    columns = []
-                    id = df['id'].unique().tolist()
-                    start = df['start'].unique().tolist()
-                    end = df['end'].unique().tolist()
-                    if len(id) > 1:
-                        columns.append('id')
-                    if len(start) > 1:
-                        columns.append('start')
-                    if len(end) > 1:
-                        columns.append('end')
-                    columns.append('matches')
-                    df.replace(np.nan, '', regex=True, inplace=True)
-                    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-            except:
-                root_logger.info('ERROR: Unable to retrieve matchRules')
-        else:
-            if optjson:
-                print_json(json.dumps(retrieve_response.json()))
-            else:
-                df = pd.DataFrame.from_dict(retrieve_response.json(), orient='index')
-                transposed_df = df.T
-                columns = ['description', 'policyId', 'version', 'lastModifiedBy', 'activations']
-                print(tabulate(transposed_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-    else:
-        root_logger.info('ERROR: Unable to retrieve policy version')
-        root_logger.info(json.dumps(retrieve_response.json(), indent=4))
-        exit(-1)
-    return 0
-
-
-@cli.command(short_help='Retrieve shared policy detail version')
-@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
-@click.option('--version', metavar='', help='Policy version number', required=False)
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, required=False)
-@pass_config
-def retrieve_shared_policy(config, optjson, version, policy_id, policy, only_match_rules):
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    if policy:
-        root_logger.info(f'...searching for cloudlet policy {policy}')
-        id, policy_info, full_policy_detail = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
-    else:
-        id = policy_id
-        root_logger.info(f'...searching for cloudlet policy-id {id}')
-        name, policy_info, full_policy_detail = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
-        print(f'Policy Name: {name}') if name else None
-
-    df = pd.json_normalize(full_policy_detail)
-    df.rename(columns={'id': 'policyId',
-                       'modifiedBy': 'lastModifiedBy'}, inplace=True)
-    columns = ['name', 'policyId', 'description', 'lastModifiedBy']
-    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
-
-    if not policy_info:
-        root_logger.info('Not found')
-    else:
-        df = pd.DataFrame(policy_info)
-        staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
-        production = df.loc[df['network'] == 'production'].iloc[0, 0]
-
-        df = cloudlet_object.get_active_properties(session, policy_id=id)
-        if not df.empty:
-            df['policy version'] = df.apply(lambda row: fill_column(row, staging, production), axis=1)
-            new_header = f'Policy ID ({policy_id}) version'
-            df.rename(columns={'policy version': new_header}, inplace=True)
-            columns = [new_header, 'network', 'property name', 'property version']
-            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
 
 @cli.command(short_help='Cloudlets that you can create a shared policy')
