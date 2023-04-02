@@ -330,10 +330,10 @@ def status_share(config, policy_id, policy):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     if policy:
         root_logger.info(f'...searching for cloudlet policy {policy}')
-        policy_id, policy_info = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
+        policy_id, policy_info, _ = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
     else:
         root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
-        name, policy_info = cloudlet_object.list_shared_policies_by_id(session, policy_id=policy_id)
+        name, policy_info, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id=policy_id)
         print(f'Policy Name: {name}') if name else None
 
     if not policy_info:
@@ -998,7 +998,22 @@ def activate_shared_policy(config, network, policy_id, version):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     df = cloudlet_object.activate_shared_policy(session, network, policy_id, version)
-    print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+    if df is not None:
+        columns = ['Policy ID', 'network', 'operation', 'status', 'Policy Version', 'activation ID']
+        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
+
+
+@cli.command(short_help='Get activation status')
+@click.option('--policy-id', metavar='', help='Policy Id', required=True)
+@click.option('--activation-id', metavar='', help='Activation Id', required=True)
+@pass_config
+def get_activation_status(config, policy_id, activation_id):
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    df = cloudlet_object.get_activation_status(session, policy_id=policy_id, activation_id=activation_id)
+    df.rename(columns={'policyId': 'Policy ID', 'policyVersion': 'Policy Version', 'id': 'Activation ID'}, inplace=True)
+    columns = ['Policy ID', 'network', 'operation', 'status', 'Policy Version', 'Activation ID']
+    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
 
 
 @cli.command(short_help='Cloudlet policies API endpoints')

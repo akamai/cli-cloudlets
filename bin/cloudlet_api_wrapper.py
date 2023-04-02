@@ -359,6 +359,19 @@ class Cloudlet:
             df = pd.DataFrame(data=response.json())
             return df
         else:
+            print(response.status_code)
+            print_json(data=response.json())
+
+    def get_activation_status(self, session, policy_id: int, activation_id: int):
+
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/{activation_id}'
+
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        if response.status_code == 200:
+            df = pd.DataFrame(data=response.json())
+            return df  # ['Policy ID', 'Policy Version', 'network' ,'operation', 'createdBy', 'Activation ID']
+        else:
             print(response.text)
 
     def form_url(self, url):
