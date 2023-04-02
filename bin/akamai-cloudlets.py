@@ -182,7 +182,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
             keys = []
             for key in utility_object.do_cloudlet_code_map():
                 keys.append(key)
-            print(f'Cloudlet Type Codes: {keys}')
+            print(f'Cloudlet Type Codes: {sorted(keys)}')
             exit(-1)
         else:
             utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
