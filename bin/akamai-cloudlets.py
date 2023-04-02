@@ -246,10 +246,16 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
-    _, policy_id, _ = utility_object.validate_policy_arguments(session, root_logger,
+    policy_name = policy
+    type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
                                                                cloudlet_object,
-                                                               policy_name=policy,
+                                                               policy_name=policy_name,
                                                                policy_id=policy_id)
+    if not policy_info:
+        root_logger.info('ERROR: Unable to find existing policy')
+        exit(-1)
+    else:
+        root_logger.info(f'Found policy-id {policy_id}, cloudlet policy {policy_name}')
 
     if version:
         retrieve_response = cloudlet_object.get_policy_version(session, policy_id, version)
@@ -428,75 +434,50 @@ def status(config, policy_id, policy):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
-
-    policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
+    type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
                                                                cloudlet_object,
                                                                policy_name=policy,
                                                                policy_id=policy_id)
 
-    try:
-        policy_id = policy_info['policyId']
-        policy_name = policy_info['name']
-        root_logger.info(f'...found policy-id {policy_id}')
-    except:
+    if not policy_info:
         root_logger.info('ERROR: Unable to find existing policy')
         exit(-1)
-
-    # setup a table
-    table = PrettyTable(['Version', 'Network', 'PM Config', 'PM Version'])
-
-    for every_policy in policy_info['activations']:
-        table_row = []
-        table_row.append(every_policy['policyInfo']['version'])
-        table_row.append(every_policy['network'])
-        table_row.append(every_policy['propertyInfo']['name'])
-        table_row.append(str(every_policy['propertyInfo']['version']))
-        table.add_row(table_row)
-
-    table.align = 'l'
-    print(table)
-
-
-@cli.command(short_help='Show status for a specific shared policy')
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
-@pass_config
-def status_share(config, policy_id, policy):
-    base_url, session = init_config(config.edgerc, config.section)
-    utility_object = Utility()
-
-    if policy_id and policy:
-        root_logger.info('Please specify either policy or policy-id')
-        exit(-1)
-
-    if not policy_id and not policy:
-        root_logger.info('Please specify either policy or policy-id')
-        exit(-1)
-
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    if policy:
-        root_logger.info(f'...searching for cloudlet policy {policy}')
-        policy_id, policy_info, _ = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
     else:
-        root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
-        name, policy_info, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id=policy_id)
-        print(f'Policy Name: {name}') if name else None
+        root_logger.info(f'Found policy-id {policy_id}, cloudlet policy {policy_name}')
 
     if not policy_info:
-        root_logger.info('Not found')
+        pass
     else:
-        df = pd.DataFrame(policy_info)
-        staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
-        production = df.loc[df['network'] == 'production'].iloc[0, 0]
+        if type == ' ':
 
-        df = cloudlet_object.get_active_properties(session, policy_id)
-        if not df.empty:
-            df['policy version'] = df.apply(lambda row: utility_object.fill_column(row, staging, production), axis=1)
+            # setup a table
+            table = PrettyTable(['Version', 'Network', 'PM Config', 'PM Version'])
+            if len(policy_info['activations']) > 0:
+                for every_policy in policy_info['activations']:
+                    table_row = []
+                    table_row.append(every_policy['policyInfo']['version'])
+                    table_row.append(every_policy['network'])
+                    table_row.append(every_policy['propertyInfo']['name'])
+                    table_row.append(str(every_policy['propertyInfo']['version']))
+                    table.add_row(table_row)
+                table.align = 'l'
+                print(table)
+            else:
+                print('no active property')
+        else:
 
-            new_header = f'Policy ID ({policy_id}) version'
-            df.rename(columns={'policy version': new_header}, inplace=True)
-            columns = [new_header, 'network', 'property name', 'property version']
-            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            df = pd.DataFrame(policy_info)
+            staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
+            production = df.loc[df['network'] == 'production'].iloc[0, 0]
+
+            df = cloudlet_object.get_active_properties(session, policy_id)
+            if not df.empty:
+                df['policy version'] = df.apply(lambda row: utility_object.fill_column(row, staging, production), axis=1)
+
+                new_header = f'Policy ID ({policy_id}) version'
+                df.rename(columns={'policy version': new_header}, inplace=True)
+                columns = [new_header, 'network', 'property name', 'property version']
+                print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
 
 @cli.command(short_help='Create a new policy')

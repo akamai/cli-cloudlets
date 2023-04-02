@@ -65,6 +65,7 @@ class Cloudlet:
         response = session.get(self.form_url(url))
         name = None
         policy_info = []
+        full_policy_detail = {}
         if response.status_code == 200:
             full_policy_detail = response.json()
             try:

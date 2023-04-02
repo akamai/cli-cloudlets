@@ -131,19 +131,16 @@ class Utility:
             policy_info = self.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
 
         if not policy_info:
+            type = 'shared'
             policy_name, policy_id, policy_info = self.validate_shared_policy_arguments(session, root_logger,
                                                                                         cloudlet_object,
                                                                                         policy_name=policy_name,
                                                                                         policy_id=policy_id)
         else:
+            type = ' '
             policy_name = policy_info['name']
             policy_id = policy_info['policyId']
-
-        if not policy_name and not policy_id:
-            root_logger.info(f'ERROR policy-id {policy_id}, cloudlet policy {policy_name}')
-        else:
-            root_logger.info(f'Found policy-id {policy_id}, cloudlet policy {policy_name}')
-        return policy_name, policy_id, policy_info
+        return type, policy_name, policy_id, policy_info
 
     def validate_shared_policy_arguments(self, session, root_logger, cloudlet_object,
                                          policy_name: str | None = None,
@@ -151,16 +148,11 @@ class Utility:
 
         if policy_name:
             id, policy_info, _ = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy_name)
+            policy_name, policy_info, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
         else:
             id = policy_id
             policy_name, policy_info, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
-
-        if policy_info:
-            policy_id = id
-            df = pd.DataFrame(policy_info)
-            print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
-
-        return policy_name, policy_id, policy_info
+        return policy_name, id, policy_info
 
     def retrieve_shared_policy(self, session, root_logger, cloudlet_object,
                                policy_name: str | None = None,
