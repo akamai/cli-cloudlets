@@ -295,7 +295,7 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=payload, headers=headers)
         return response
 
-    def get_schema(self, session, cloudlet_type: str):
+    def get_schema(self, session, cloudlet_type: str | None = None) -> pd.DataFrame:
         headers = {'accept': 'application/json'}
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
@@ -304,21 +304,35 @@ class Cloudlet:
 
         df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
         columns = ['name', 'code']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
-        response = session.get(self.form_url(url), headers=headers)
-        df = pd.DataFrame(response.json()['schemas'])
+        if cloudlet_type:
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
+            response = session.get(self.form_url(url), headers=headers)
+            schemas_df = pd.DataFrame(response.json()['schemas'])
 
-        df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
-        columns = ['action', 'endpoint']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            schemas_df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
+            columns = ['action', 'endpoint']
+            print(tabulate(schemas_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-nimbus_policy_version-ER-1.0.json'
-        response = session.get(self.form_url(url), headers=headers)
-        df = pd.DataFrame(response.json())
-        df = df[df['properties'].notna()]
-        print(tabulate(df[['properties']], headers='keys', showindex=True, tablefmt='psql'))
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-nimbus_policy_version-ER-1.0.json'
+            response = session.get(self.form_url(url), headers=headers)
+            spec_df = pd.DataFrame(response.json())
+            spec_df = spec_df[spec_df['properties'].notna()]
+            print(tabulate(spec_df[['properties']], headers='keys', showindex=True, tablefmt='psql'))
+
+            return df[['name', 'code']], schemas_df[['action', 'endpoint']], spec_df[['properties']]
+
+        return df[['name', 'code']], None, None
+
+    def available_shared_policies(self, session) -> pd.DataFrame:
+        url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
+        response = session.get(self.form_url(url))
+        if response.status_code == 200:
+            df = pd.DataFrame(data=response.json())
+            df.rename(columns={'cloudletType': 'code',
+                                'cloudletName': 'name'}, inplace=True)
+            return df[['name', 'code']]
 
     def activate_policy_version(self, session, policy_id, version, additionalPropertyNames=[], network='staging'):
         """Function to activate a policy version"""
@@ -335,15 +349,6 @@ class Cloudlet:
         url = f'https:///cloudlets/api/v2/policies/{policy_id}/activations?network={network}'
         policy_activations_response = session.get(self.form_url(url))
         return policy_activations_response
-
-    def available_shared_policies(self, session) -> pd.DataFrame:
-        url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
-        response = session.get(self.form_url(url))
-        if response.status_code == 200:
-            df = pd.DataFrame(data=response.json())
-            df.rename(columns={'cloudletType': 'code',
-                                'cloudletName': 'name'}, inplace=True)
-            return df[['name', 'code']]
 
     def activate_shared_policy(self, session, network: str, policy_id: int, version: int) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'

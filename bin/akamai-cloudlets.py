@@ -133,6 +133,33 @@ def help(ctx):
     print(ctx.parent.get_help())
 
 
+@cli.command(short_help='List all cloudlets code')
+@pass_config
+def cloudlets(config):
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    policy_df, _, _ = cloudlet_object.get_schema(session)
+    shared_df = cloudlet_object.available_shared_policies(session)
+    shared_df['policy'] = '* shared'
+
+    stack = pd.concat([policy_df, shared_df], axis=0)
+    stack.fillna('', inplace=True)
+    stack.sort_values(by=['code', 'policy'], inplace=True)
+    stack['count'] = stack.groupby('code')['code'].transform('count')
+
+    stack.reset_index(drop=True, inplace=True)
+    stack['name'] = stack['name'].str.replace('_', ' ')
+    stack['name'] = stack['name'].str.title()
+
+    df1 = stack[stack['count'] == 1]
+    df2 = stack[stack['policy'] == '* shared']
+    df3 = pd.concat([df1, df2], axis=0)
+    df3.sort_values(by=['code', 'policy'], inplace=True)
+    df3.reset_index(drop=True, inplace=True)
+    columns = ['name', 'code', 'policy']
+    print(tabulate(df3[columns], headers='keys', tablefmt='psql', showindex=False))
+
+
 @cli.command(short_help='List policies')
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
@@ -159,19 +186,25 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
             exit(-1)
         else:
             utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
+            cloudlet_object.get_schema(session)
 
     root_logger.info('...fetching policy list')
+
     policies_response = cloudlet_object.list_policies(session)
     if policies_response.status_code == 200:
         policies_data = policies_response.json()
-    else:
-        root_logger.info('ERROR: Unable to fetch policy list')
-        root_logger.info(json.dumps(policies_response.json(), indent=4))
-        exit(-1)
+        policy_df = pd.DataFrame(policies_data)
+        policy_df['Shared Policy'] = pd.Series(dtype='str')
+        policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
 
-    df = pd.DataFrame(policies_data)
-    df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
-    df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID']]
+    shared_policies = cloudlet_object.list_shared_policies(session)
+    shared_df = pd.DataFrame(shared_policies)
+    shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name', 'cloudletType': 'Type', 'groupId': 'Group ID'}, inplace=True)
+    shared_df['Shared Policy'] = '* shared'
+
+    df = pd.concat([policy_df, shared_df], ignore_index=True)
+    df.fillna('', inplace=True)
+    df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy']]
     df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
     df.reset_index(drop=True, inplace=True)
 
@@ -193,9 +226,12 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
         os.remove('temp_output.csv')
     else:
         print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+        pass
+
     root_logger.info(f'{len(df.index)} policies found')
 
 
+'''
 @cli.command(short_help='List shared policies')
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
@@ -203,9 +239,9 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
 @click.option('--name-contains', metavar='', help='String to use for searching for policies by name', required=False)
 @pass_config
 def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
-    '''
+    """
     List Share Policies
-    '''
+    """
     base_url, session = init_config(config.edgerc, config.section)
 
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -255,6 +291,7 @@ def list_share(config, optjson, optcsv, cloudlet_type, name_contains):
     else:
         print(tabulate(df, headers='keys', tablefmt='psql', showindex=False, numalign='left'))
     root_logger.info(f'{len(df.index)} shared policies found')
+'''
 
 
 @cli.command(short_help='Show status for a specific policy')
