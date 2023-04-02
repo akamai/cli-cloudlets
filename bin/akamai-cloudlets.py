@@ -956,16 +956,6 @@ def activate(config, policy_id, policy, version, add_properties, network):
     return 0
 
 
-@cli.command(short_help='Cloudlets that you can create a shared policy')
-@pass_config
-def available_shared_policies(config):
-    """Cloudlets that you can create a shared policy"""
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    df = cloudlet_object.available_shared_policies(session)
-    print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
-
-
 @cli.command(short_help='Activate shared policy version')
 @click.option('-n', '--network', metavar='', help='STAGING, PRODUCTION', required=True)
 @click.option('-p', '--policy-id', metavar='', help='Policy Id', required=True)
