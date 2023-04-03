@@ -481,47 +481,28 @@ def status(config, policy_id, policy):
 
 
 @cli.command(short_help='Create a new policy')
-@click.option('--group-id', metavar='', help='Group Id', required=False)
+@click.option('--group-id', metavar='', type=int, help='Group Id', required=False)
 @click.option('--group-name', metavar='', help='Group Name', required=False)
-@click.option('--notes', metavar='', help='Policy Notes', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=True)
+@click.option('--share', help='Shared policy', is_flag=True, default=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=True)
+@click.option('--notes', metavar='', help='Policy Notes', required=False)
 @pass_config
-def create_policy(config, group_id, group_name, notes, policy, cloudlet_type):
+def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
+                  notes: str | None = None):
     """
     Create a new policy
     """
     base_url, session = init_config(config.edgerc, config.section)
-
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
-    policy_name = policy
-    group_id = group_id
-    group_name = group_name
-
-    if group_id:
-        if group_id.startswith('grp_'):
-            group_id = group_id.split('_')[1]
-        try:
-            group_id = int(group_id)
-        except:
-            root_logger.info('group-id must be a number or start with grp_')
-            exit(-1)
-
     cloudlet_type = cloudlet_type.upper()
+    utility_object.check_group_input(root_logger, group_name=group_name, group_id=group_id)
+
     if notes:
         description = notes
     else:
-        # notes not specified, create our own default description
-        description = f'{policy_name} (Created by Cloudlet CLI)'
-
-    if group_id and group_name:
-        root_logger.info('Please specify either group-id or group-name.')
-        exit(-1)
-
-    if group_id is None and group_name is None:
-        root_logger.info('Please specify either group-id or group-name.')
-        exit(-1)
+        description = 'created by cloudlet CLI'
 
     # verify valid cloudlet type code
     if cloudlet_type not in utility_object.do_cloudlet_code_map().keys():
@@ -550,68 +531,27 @@ def create_policy(config, group_id, group_name, notes, policy, cloudlet_type):
                 root_logger.info(f'ERROR: Unable to find group: {group_name}')
                 exit(-1)
 
-    policy_data = dict()
-    policy_data['cloudletId'] = cloudlet_id
-    policy_data['groupId'] = group_id
-    policy_data['name'] = policy_name
-    policy_data['description'] = description
-
-    create_response = cloudlet_object.create_clone_policy(session, json.dumps(policy_data))
+    if share:
+        create_response, _, _ = cloudlet_object.create_shared_policy(session,
+                                                                     name=policy,
+                                                                     type=cloudlet_type,
+                                                                     group_id=group_id,
+                                                                     notes=notes)
+    else:
+        policy_data = dict()
+        policy_data['cloudletId'] = cloudlet_id
+        policy_data['groupId'] = group_id
+        policy_data['name'] = policy
+        policy_data['description'] = description
+        create_response = cloudlet_object.create_clone_policy(session, policy_data)
 
     if create_response.status_code == 201:
         print(f'Policy {create_response.json()["policyId"]} created successfully')
-        pass
     else:
         root_logger.info('ERROR: Unable to create policy')
-        root_logger.info(json.dumps(create_response.json(), indent=4))
+        print_json(data=create_response.json())
 
     return 0
-
-
-@cli.command(short_help='Create a new shared policy')
-@click.option('-p', '--policy', metavar='', help='Policy Name', required=True)
-@click.option('-t', '--cloudlet-type', type=click.Choice(['AS', 'ER', 'FR', 'VWR'], case_sensitive=False),
-               help='Abbreviation code for cloudlet type', required=True)
-@click.option('-g', '--group-id', metavar='', type=int, help='Group Id without grp_', required=False)
-@click.option('--group-name', metavar='', type=str, help='Group Name', required=False)
-@click.option('-n', '--notes', metavar='', help='Policy Notes', required=False)
-@pass_config
-def create_shared_policy(config, policy, cloudlet_type, group_id, group_name, notes):
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-
-    if group_id and group_name:
-        root_logger.info('Please specify either group-id or group-name.')
-        exit(-1)
-
-    if group_id is None and group_name is None:
-        root_logger.info('Please specify either group-id or group-name.')
-        exit(-1)
-
-    # validate group-name
-    if group_name:
-        found_group = False
-        root_logger.info(f'...searching for group: {group_name}')
-        group_response = cloudlet_object.get_groups(session)
-        if group_response.status_code == 200:
-            for every_group in group_response.json():
-                if every_group['groupName'].upper() == group_name.upper():
-                    group_id = every_group['groupId']
-                    root_logger.info(f'...found group-id: {every_group["groupId"]}')
-                    found_group = True
-                    pass
-            if not found_group:
-                root_logger.info(f'ERROR: Unable to find group: {group_name}')
-                exit(-1)
-
-    response, policy_id, policy_version = cloudlet_object.create_shared_policy(session, name=policy, type=cloudlet_type, group_id=group_id, notes=notes)
-    if policy_id:
-        if policy_version:
-            print(f'Policy ID {policy_id}, version {policy_version} created successfully')
-        else:
-            print_json(data=response.json())
-            if cloudlet_object.delete_shared_policy(session, policy_id=policy_id):
-                root_logger.info(f'ERROR: Unable to create policy  {policy_id}')
 
 
 @cli.command(short_help='Clone policy using API v2 [Deprecated]')
@@ -860,7 +800,8 @@ def update_share(config, group_id, policy_id, policy, notes, version, file):
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--version', metavar='', help='Policy version', required=False)
 @click.option('--add-properties', metavar='', help='Property names to be associated to cloudlet policy (comma separated).', required=False)
-@click.option('--network', metavar='', help='Akamai network (staging or prod)', required=True)
+@click.option('-n', '--network', metavar='', type=click.Choice(['staging', 'prod'], case_sensitive=False),
+              help='Akamai network (staging or prod)', required=True)
 @pass_config
 def activate(config, policy_id, policy, version, add_properties, network):
     """
@@ -957,9 +898,10 @@ def activate(config, policy_id, policy, version, add_properties, network):
 
 
 @cli.command(short_help='Activate shared policy version')
-@click.option('-n', '--network', metavar='', help='STAGING, PRODUCTION', required=True)
 @click.option('-p', '--policy-id', metavar='', help='Policy Id', required=True)
 @click.option('--version', metavar='', help='Policy version number', required=True)
+@click.option('-n', '--network', metavar='', type=click.Choice(['staging', 'prod'], case_sensitive=False),
+              help='Akamai network (staging or prod)', required=True)
 @pass_config
 def activate_shared_policy(config, network, policy_id, version):
     """Cloudlets that you can create a shared policy"""
@@ -973,7 +915,8 @@ def activate_shared_policy(config, network, policy_id, version):
 
 @cli.command(short_help='Get activation status')
 @click.option('--policy-id', metavar='', help='Policy Id', required=True)
-@click.option('--activation-id', metavar='', help='Activation Id', required=True)
+@click.option('-n', '--network', metavar='', type=click.Choice(['staging', 'prod'], case_sensitive=False),
+              help='Akamai network (staging or prod)', required=True)
 @pass_config
 def get_activation_status(config, policy_id, activation_id):
     base_url, session = init_config(config.edgerc, config.section)

@@ -35,8 +35,9 @@ class Cloudlet:
 
     def list_policies(self, session):
         policies_response = None
+        headers = {'accept': 'application/json'}
         policies_url = f'https://{self.access_hostname}/cloudlets/api/v2/policies'
-        policies_response = session.get(self.form_url(policies_url))
+        policies_response = session.get(self.form_url(policies_url), headers=headers)
         return policies_response
 
     def list_shared_policies(self, session) -> list:
@@ -144,7 +145,8 @@ class Cloudlet:
 
     def create_clone_policy(self, session, data, clone_policy_id='optional', version='optional'):
         """Function to clone a policy version"""
-        headers = {'Content-Type': 'application/json'}
+        headers = {'accept': 'application/json',
+                   'Content-Type': 'application/json'}
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/'
         if clone_policy_id != 'optional':
             url = f'{url}?clonePolicyId={clone_policy_id}'
@@ -153,7 +155,7 @@ class Cloudlet:
             if '?' in url:
                 symbol = '&'
                 url = f'{url}{symbol}version={version}'
-        cloudlet_policy_create_response = session.post(self.form_url(url), data=data, headers=headers)
+        cloudlet_policy_create_response = session.post(self.form_url(url), data=json.dumps(data), headers=headers)
         return cloudlet_policy_create_response
 
     def create_shared_policy(self, session, name: str, type: str,
@@ -177,9 +179,9 @@ class Cloudlet:
             if version_response.status_code == 201:
                 try:
                     policy_version = version_response.json()['version']
-                    return None, policy_id, policy_version
-                except:
                     return version_response, policy_id, policy_version
+                except:
+                    return version_response, policy_id, None
             else:
                 return version_response, policy_id, None
         return response, None, None
@@ -322,27 +324,30 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
         response = session.get(self.form_url(url), headers=headers)
         df = pd.DataFrame(response.json())
-
-        df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
-        columns = ['name', 'code']
-        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+        if df.empty:
+            print('empty')
+        else:
+            df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
+            columns = ['name', 'code']
+            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
         if cloudlet_type:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
             response = session.get(self.form_url(url), headers=headers)
             schemas_df = pd.DataFrame(response.json()['schemas'])
-
             schemas_df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
             columns = ['action', 'endpoint']
             print(tabulate(schemas_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-nimbus_policy_version-ER-1.0.json'
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/create-policy.json'
             response = session.get(self.form_url(url), headers=headers)
-            spec_df = pd.DataFrame(response.json())
-            spec_df = spec_df[spec_df['properties'].notna()]
-            print(tabulate(spec_df[['properties']], headers='keys', showindex=True, tablefmt='psql'))
+            print_json(data=response.json())
+            spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
+            print(tabulate(spec_df, headers='keys', showindex=True, tablefmt='psql'))
 
-            return df[['name', 'code']], schemas_df[['action', 'endpoint']], spec_df[['properties']]
+            # spec_df = spec_df[spec_df['properties'].notna()]
+            # print(tabulate(spec_df[['properties']], headers='keys', showindex=True, tablefmt='psql'))
+            # return df[['name', 'code']], schemas_df[['action', 'endpoint']], spec_df[['properties']]
 
         return df[['name', 'code']], None, None
 

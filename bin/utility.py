@@ -108,9 +108,21 @@ class Utility:
             else:
                 root_logger.info('ERROR: Unable to find latest version. Check if version exists')
 
+    def check_group_input(self, root_logger,
+                                group_name: str | None = None,
+                                group_id: int | None = None) -> None:
+
+        if group_id and group_name:
+            root_logger.info('Please specify either group-id or group-name.')
+            exit(-1)
+
+        if not group_id and not group_name:
+            root_logger.info('Please specify either group-id or group-name.')
+            exit(-1)
+
     def check_policy_input(self, root_logger,
                                  policy_name: str | None = None,
-                                 policy_id: int | None = None) -> tuple:
+                                 policy_id: int | None = None) -> None:
 
         if policy_id and policy_name:
             root_logger.info('Please specify either policy or policy-id.')
