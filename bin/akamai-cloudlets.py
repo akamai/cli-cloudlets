@@ -138,7 +138,7 @@ def help(ctx):
 def cloudlets(config):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    policy_df, _, _ = cloudlet_object.get_schema(session)
+    policy_df = cloudlet_object.get_schema(session)
     shared_df = cloudlet_object.available_shared_policies(session)
     shared_df['policy'] = '* shared'
 
@@ -151,6 +151,7 @@ def cloudlets(config):
     stack['name'] = stack['name'].str.replace('_', ' ')
     stack['name'] = stack['name'].str.title()
 
+    # combine and if code is duplicated, remove cloudlets that are not shared policy
     df1 = stack[stack['count'] == 1]
     df2 = stack[stack['policy'] == '* shared']
     df3 = pd.concat([df1, df2], axis=0)
@@ -873,18 +874,18 @@ def activate_shared_policy(config, network, policy_id, version):
         print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
 
 
-@cli.command(short_help='Get activation status')
+@cli.command(short_help='Show activation history qstatus')
 @click.option('--policy-id', metavar='', help='Policy Id', required=True)
-@click.option('-n', '--network', metavar='', type=click.Choice(['staging', 'prod'], case_sensitive=False),
-              help='Akamai network (staging or prod)', required=True)
 @pass_config
-def get_activation_status(config, policy_id, activation_id):
+def activation_status(config, policy_id):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    df = cloudlet_object.get_activation_status(session, policy_id=policy_id, activation_id=activation_id)
-    df.rename(columns={'policyId': 'Policy ID', 'policyVersion': 'Policy Version', 'id': 'Activation ID'}, inplace=True)
-    columns = ['Policy ID', 'network', 'operation', 'status', 'Policy Version', 'Activation ID']
-    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
+    df = cloudlet_object.get_activation_status(session, policy_id=policy_id)
+    # print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+    df.rename(columns={'id': 'activationId', 'policyVersion': 'policy version'}, inplace=True)
+    columns = ['policyId', 'activationId', 'network', 'operation', 'policy version', 'finishDate', 'status']
+    df.sort_values(by=['network', 'finishDate'], ascending=[True, False], inplace=True)
+    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
 
 @cli.command(short_help='Cloudlet policies API endpoints specification')

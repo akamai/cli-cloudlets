@@ -318,7 +318,7 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=payload, headers=headers)
         return response
 
-    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> None:
+    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> pd.DataFrame:
         headers = {'accept': 'application/json'}
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
@@ -337,7 +337,7 @@ class Cloudlet:
             df = df[df['code'] == cloudlet_type]
 
         columns = ['name', 'code']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
         if cloudlet_type:
             columns = ['action', 'endpoint']
             print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
@@ -379,6 +379,8 @@ class Cloudlet:
                 print(tabulate(pdf[columns_2], headers='keys', showindex=True, tablefmt='psql'))
             except:
                 print('no matchCriteriaType')
+
+        return df
 
     def available_shared_policies(self, session) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
@@ -422,17 +424,17 @@ class Cloudlet:
             print(response.status_code)
             print_json(data=response.json())
 
-    def get_activation_status(self, session, policy_id: int, activation_id: int):
+    def get_activation_status(self, session, policy_id: int) -> pd.DataFrame:
 
-        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/{activation_id}'
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/'
 
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
         if response.status_code == 200:
-            df = pd.DataFrame(data=response.json())
-            return df  # ['Policy ID', 'Policy Version', 'network' ,'operation', 'createdBy', 'Activation ID']
+            df = pd.DataFrame(data=response.json()['content'])
+            return df
         else:
-            print(response.text)
+            print_json(data=response.json())
 
     def form_url(self, url):
         # This is to ensure accountSwitchKey works for internal users
