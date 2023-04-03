@@ -484,8 +484,8 @@ def status(config, policy_id, policy):
 @click.option('--group-id', metavar='', type=int, help='Group Id', required=False)
 @click.option('--group-name', metavar='', help='Group Name', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=True)
-@click.option('--share', help='Shared policy', is_flag=True, default=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=True)
+@click.option('--share', help='Shared policy', is_flag=True, default=False)
 @click.option('--notes', metavar='', help='Policy Notes', required=False)
 @pass_config
 def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
@@ -688,111 +688,71 @@ def clone(config, version, policy_id, group_id, new_policy):
 
 
 @cli.command(short_help='Update new policy version with rules')
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--notes', metavar='', help='Policy version notes', required=False)
-@click.option('--version', metavar='', help='Policy version to update otherwise creates new version', required=False)
-@click.option('--file', metavar='', help='JSON file with policy data', required=True)
-@pass_config
-def update(config, policy_id, policy, notes, version, file):
-    """
-    Update new policy version with rules
-    """
-    base_url, session = init_config(config.edgerc, config.section)
-
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    utility_object = Utility()
-    policy_name = policy
-    policy_id = policy_id
-    version = version
-
-    if policy_id and policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    if not policy_id and not policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    # get policy
-    if policy:
-        root_logger.info(f'...searching for cloudlet policy {policy_name}')
-        policy_info = utility_object.get_policy_by_name(session, cloudlet_object, policy_name, root_logger)
-    else:
-        root_logger.info(f'...searching for cloudlet policy-id {policy_id}')
-        policy_info = utility_object.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
-
-    try:
-        policy_id = policy_info['policyId']
-        policy_name = policy_info['name']
-        root_logger.info(f'...found policy-id {policy_id}')
-    except:
-        root_logger.info('ERROR: Unable to find existing policy')
-        exit(-1)
-
-    if file:
-        with open(file) as update_content:
-            update_json_content = json.load(update_content)
-
-    # if there is no description field in <FILE>, then update it with --notes argument or use default description
-    if notes:
-        update_json_content = {'description': notes}
-
-    if version:
-        # update the provided version
-        update_response = cloudlet_object.update_policy_version(session, policy_id, version, data=update_json_content)
-        if update_response.status_code == 400:
-            print_json(data=update_response.json())
-        else:
-            root_logger.info(f'Updating policy {policy_name} v{version}')
-    else:
-        # create and update a new version
-        update_response = cloudlet_object.create_clone_policy_version(session, policy_id, json.dumps(update_json_content))
-
-    if update_response.status_code == 201:
-        version = update_response.json()['version']
-        root_logger.info(f'create and update a new version {version}')
-    elif update_response.status_code == 200:
-        root_logger.info('Successfully updated policy version')
-    else:
-        root_logger.info('ERROR: Unable to update policy')
-        root_logger.info(json.dumps(update_response.json(), indent=4))
-        exit(-1)
-
-    return 0
-
-
-@cli.command(short_help='Update new shared policy version with rules')
-@click.option('-g', '--group_id', metavar='', help='Group ID without ctr_ prefix', required=False)
+@click.option('--group-id', metavar='', help='Group ID without ctr_ prefix', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--notes', metavar='', help='Policy version notes', required=False)
 @click.option('--version', metavar='', help='Policy version to update otherwise creates new version', required=False)
 @click.option('--file', metavar='', help='JSON file with policy data', required=False)
+@click.option('--share', help='Shared policy', is_flag=True, default=False)
 @pass_config
-def update_share(config, group_id, policy_id, policy, notes, version, file):
+def update(config, group_id, policy_id, policy, notes, version, file, share):
     """
     Update new policy version with rules
     """
     base_url, session = init_config(config.edgerc, config.section)
-
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    utility_object = Utility()
+    utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
 
-    if policy:
-        policy_name = policy
-        id, _, _ = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy)
-
-    if policy_id:
-        policy_name, _, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id)
-    else:
-        policy_id = id
-
-    if version:
-        update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
-        if update_response.status_code == 400:
-            print_json(data=update_response.json())
+    type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
+                                                               cloudlet_object,
+                                                               policy_name=policy,
+                                                               policy_id=policy_id)
+    if share:
+        if version:
+            update_response = cloudlet_object.update_shared_policy_detail(session, policy_id, version, notes)
+            if update_response.status_code == 409:
+                root_logger.info(f"{update_response.json()['errors'][0]['detail']}")
+            elif update_response.status_code == 200:
+                root_logger.info(f'Updating policy {policy_name} v{version}')
+            else:
+                print_json(data=update_response.json())
+                root_logger.info(f'Not able to update policy {policy_name} v{version}')
         else:
-            root_logger.info(f'Updating policy {policy_name} v{version}')
+            update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
+            if update_response.status_code == 400:
+                print_json(data=update_response.json())
+                root_logger.info(f'Not able to update policy {policy_name}')
+            else:
+                root_logger.info(f'Updating policy {policy_name}')
+    else:
+        if file:
+            with open(file) as update_content:
+                update_json_content = json.load(update_content)
+        update_json_content = {'description': notes} if notes else {'description': 'update by cloudlets cli'}
+
+        if version:
+            # update the provided version
+            update_response = cloudlet_object.update_policy_version(session, policy_id, version, data=update_json_content)
+            print_json(data=update_response.json())
+            if update_response.status_code == 200:
+                root_logger.info(f'Updating policy {policy_name} v{version}')
+        else:
+            # create and update a new version
+            update_response = cloudlet_object.create_clone_policy_version(session, policy_id, json.dumps(update_json_content))
+            print_json(data=update_response.json())
+
+        if update_response.status_code == 201:
+            version = update_response.json()['version']
+            root_logger.info(f'create and update a new version {version}')
+        elif update_response.status_code == 200:
+            root_logger.info('Successfully updated policy version')
+        else:
+            root_logger.info('ERROR: Unable to update policy')
+            exit(-1)
+
+    return 0
 
 
 @cli.command(short_help='Activate policy version')

@@ -339,7 +339,7 @@ class Cloudlet:
             columns = ['action', 'endpoint']
             print(tabulate(schemas_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
-            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/create-policy.json'
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-policy.json'
             response = session.get(self.form_url(url), headers=headers)
             print_json(data=response.json())
             spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
