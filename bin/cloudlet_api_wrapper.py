@@ -318,7 +318,7 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=payload, headers=headers)
         return response
 
-    def get_schema(self, session, cloudlet_type: str | None = None) -> pd.DataFrame:
+    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> None:
         headers = {'accept': 'application/json'}
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
@@ -328,28 +328,57 @@ class Cloudlet:
             print('empty')
         else:
             df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
-            columns = ['name', 'code']
-            print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
 
         if cloudlet_type:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
             response = session.get(self.form_url(url), headers=headers)
             schemas_df = pd.DataFrame(response.json()['schemas'])
             schemas_df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
+            df = df[df['code'] == cloudlet_type]
+
+        columns = ['name', 'code']
+        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+        if cloudlet_type:
             columns = ['action', 'endpoint']
-            print(tabulate(schemas_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
 
-            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/update-policy.json'
+        if template:
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
             response = session.get(self.form_url(url), headers=headers)
-            print_json(data=response.json())
             spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
-            print(tabulate(spec_df, headers='keys', showindex=True, tablefmt='psql'))
+            dft = spec_df.T
 
-            # spec_df = spec_df[spec_df['properties'].notna()]
-            # print(tabulate(spec_df[['properties']], headers='keys', showindex=True, tablefmt='psql'))
-            # return df[['name', 'code']], schemas_df[['action', 'endpoint']], spec_df[['properties']]
+            print('\n\n\nFields infomation')
+            properties = dft['properties'].values.tolist()
+            pdf = pd.DataFrame(properties)
+            pdf.fillna('', inplace=True)
+            print(tabulate(pdf, headers='keys', showindex=True, tablefmt='psql'))
 
-        return df[['name', 'code']], None, None
+            try:
+                print('\n\n\nmatchRuleType')
+                matchRuleType = response.json()['definitions']['matchRuleType']['properties']
+                pdf = pd.DataFrame(matchRuleType)
+                pdf.fillna('', inplace=True)
+                columns_1 = ['type', 'name', 'matchURL', 'matchesAlways', 'redirectURL', 'statusCode', 'useIncomingQueryString', 'useIncomingSchemeAndHost']
+                print(tabulate(pdf[columns_1], headers='keys', showindex=True, tablefmt='psql'))
+
+                columns_2 = ['matches', 'useRelativeUrl']
+                print(tabulate(pdf[columns_2], headers='keys', showindex=True, tablefmt='psql'))
+            except:
+                print('no matchRuleType')
+
+            try:
+                print('\n\n\nmatchCriteriaType')
+                matchCriteriaType = response.json()['definitions']['matchCriteriaType']['properties']
+                pdf = pd.DataFrame(matchCriteriaType)
+                pdf.fillna('', inplace=True)
+                columns_1 = ['caseSensitive', 'matchValue', 'negate', 'matchOperator', 'checkIPs', 'objectMatchValue']
+                print(tabulate(pdf[columns_1], headers='keys', showindex=True, tablefmt='psql'))
+
+                columns_2 = ['matchType']
+                print(tabulate(pdf[columns_2], headers='keys', showindex=True, tablefmt='psql'))
+            except:
+                print('no matchCriteriaType')
 
     def available_shared_policies(self, session) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'

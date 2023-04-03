@@ -887,13 +887,14 @@ def get_activation_status(config, policy_id, activation_id):
     print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
 
 
-@cli.command(short_help='Cloudlet policies API endpoints')
-@click.option('--cloudlet-type', metavar='', help='cloudlet type', required=True)
+@cli.command(short_help='Cloudlet policies API endpoints specification')
+@click.option('--cloudlet-type', metavar='', help='cloudlet type', required=False)
+@click.option('--template', metavar='', help='ie. update-policy, create-policy, update-nimbus_policy_version-ALB-1.0', required=False)
 @pass_config
-def available_policy_endpoints(config, cloudlet_type: str):
+def policy_endpoints(config, cloudlet_type, template):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_schema(session, cloudlet_type)
+    cloudlet_object.get_schema(session, cloudlet_type, template)
 
 
 def get_prog_name():
