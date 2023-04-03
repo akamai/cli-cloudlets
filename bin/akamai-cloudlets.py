@@ -554,7 +554,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
     return 0
 
 
-@cli.command(short_help='Clone policy using API v2 [Deprecated]')
+# @cli.command(short_help='Clone policy using API v2 [Deprecated]')
 @click.option('--version', metavar='', help='Policy version number', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
