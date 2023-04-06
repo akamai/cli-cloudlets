@@ -423,7 +423,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
     return 0
 
 
-@cli.command(short_help='Show status for a specific policy')
+@cli.command(short_help='Show policy status with property manager version, if any')
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @pass_config
@@ -482,7 +482,7 @@ def status(config, policy_id, policy):
 
 
 @cli.command(short_help='Create a new policy')
-@click.option('--group-id', metavar='', type=int, help='Group Id', required=False)
+@click.option('--group-id', metavar='', type=int, help='Group ID without grp_ prefix', required=False)
 @click.option('--group-name', metavar='', help='Group Name', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=True)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=True)
@@ -557,11 +557,11 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
 
 # @cli.command(short_help='Clone policy using API v2 [Deprecated]')
 @click.option('--version', metavar='', help='Policy version number', required=False)
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
+@click.option('--policy-id', metavar='', help='Policy ID', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--notes', metavar='', help='New Policy Notes', required=False)
 @click.option('--new-group-name', metavar='', help='Group Name of new policy', required=False)
-@click.option('--new-group-id', metavar='', help='Group Id of new policy', required=False)
+@click.option('--new-group-id', metavar='', help='Group ID of new policy', required=False)
 @click.option('--new-policy', metavar='', help='New Policy Name', required=True)
 @pass_config
 def clone_api_v2(config, version, policy_id, policy, notes, new_group_name, new_group_id, new_policy):
@@ -761,7 +761,7 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--version', metavar='', help='Policy version', required=False)
 @click.option('--add-properties', metavar='', help='Property names to be associated to cloudlet policy (comma separated).', required=False)
-@click.option('-n', '--network', metavar='', type=click.Choice(['staging', 'prod'], case_sensitive=False),
+@click.option('--network', metavar='', type=click.Choice(['staging', 'production'], case_sensitive=False),
               help='Akamai network (staging or prod)', required=True)
 @pass_config
 def activate(config, policy_id, policy, version, add_properties, network):
@@ -769,119 +769,72 @@ def activate(config, policy_id, policy, version, add_properties, network):
     Activate a policy version
     """
     base_url, session = init_config(config.edgerc, config.section)
-
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
-    policy_name = policy
-    policy_id = policy_id
-    network = network.lower()
-
+    utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
+    type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
+                                                                                         cloudlet_object,
+                                                                                         policy_name=policy,
+                                                                                         policy_id=policy_id)
+    # associate properties to cloudlet policy if argument passed in
     if add_properties:
         additionalPropertyNames = add_properties.split(',')
     else:
         additionalPropertyNames = []
-
-    if network not in ['staging', 'prod']:
-        root_logger.info("Please specify 'staging' or 'prod' network")
-        exit(-1)
-
-    if policy_id and policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    if not policy_id and not policy:
-        root_logger.info('Please specify either policy or policy-id.')
-        exit(-1)
-
-    # get policy
-    if policy:
-        root_logger.info('...searching for cloudlet policy ' + str(policy_name))
-        policy_info = utility_object.get_policy_by_name(session, cloudlet_object, policy_name, root_logger)
-    else:
-        root_logger.info('...searching for cloudlet policy-id ' + str(policy_id))
-        policy_info = utility_object.get_policy_by_id(session, cloudlet_object, policy_id, root_logger)
-
-    try:
-        policy_id = policy_info['policyId']
-        policy_name = policy_info['name']
-        root_logger.info('...found policy-id ' + str(policy_id))
-    except:
-        root_logger.info('ERROR: Unable to find existing policy')
-        exit(-1)
-
-    if version:
-        version = version
-    else:
-        # version not specified, find latest version to activate
-        version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
-
-    # associate properties to cloudlet policy if argument passed in
     if len(additionalPropertyNames) > 0:
-        root_logger.info('...associating properties: ' + str(additionalPropertyNames))
+        root_logger.info(f'...associating properties: {additionalPropertyNames}')
 
-    root_logger.info('Activating ' + str(policy_name) + ' v' + str(version) + ' to ' + str(network).upper())
-    start_time = round(time.time())
-    activation_response = cloudlet_object.activate_policy_version(session, policy_id,
-                                                                  version, additionalPropertyNames,
-                                                                  network)
-    if activation_response.status_code == 200:
-        root_logger.info('...submitted activation request')
-        status = 'pending'
+    if not version:
+        version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
+        if not version:
+            _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
+
+    start_time = time.perf_counter()
+    if type == ' ':
+        activation_response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
+                                                                      version=version, network=network.upper(),
+                                                                      additionalPropertyNames=additionalPropertyNames)
+    else:
+        activation_response = cloudlet_object.activate_shared_policy(session, policy_id=policy_id, version=version, network=network.upper())
+
+    if activation_response.status_code != 202:
+        print(activation_response.status_code)
+        print_json(data=activation_response.json())
+    else:
+        activation_id = activation_response.json()['id']
+        status = 'IN_PROGRESS'
         # check every 30s to see if activation status for version/network is active
-        while status != 'active':
-            activation_status_response = cloudlet_object.list_policy_activations(session, policy_id, network)
-            if activation_status_response.status_code == 200:
-                for every_activation in activation_status_response.json():
-                    if str(every_activation['policyInfo']['version']) == str(version) \
-                        and str(every_activation['network']).lower() == str(network):
-                        status = every_activation['policyInfo']['status']
-                        if status == 'active':
-                            root_logger.info('Successfully activated policy version')
-                            end_time = round(time.time())
-                            command_time = end_time - start_time
-                            root_logger.info('DURATION: ' + str(strftime('%H:%M:%S', gmtime(command_time))) + '\n')
-                            break
-                        else:
-                            pass
+        while status == 'IN_PROGRESS':
+            response = cloudlet_object.list_shared_policy_activations(session, policy_id, activation_id)
+            if response.status_code == 200:
+                try:
+                    activation = response.json()
+                    if activation['status'] == 'SUCCESS':
+                        root_logger.info('Successfully activated policy version')
+                        end_time = time.perf_counter()
+                        elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+                        msg = f'Successfully policy {policy_id} on Akamai {network} network'
+                        root_logger.info(f'Activation Duration: {elapse_time} {msg}')
+                        break
+                    else:
+                        root_logger.info('polling 30s...')
+                        time.sleep(5)
+                except:
+                    break
             else:
                 root_logger.info('ERROR: Unable to retrieve activation status')
-                root_logger.info(json.dumps(activation_status_response.json(), indent=4))
                 exit(-1)
-            if status != 'active':
-                root_logger.info('...polling 30s')
-                time.sleep(30)
 
-    else:
-        root_logger.info('ERROR: Unable to activate policy')
-        root_logger.info(json.dumps(activation_response.json(), indent=4))
-        exit(-1)
     return 0
 
 
-@cli.command(short_help='Activate shared policy version')
-@click.option('-p', '--policy-id', metavar='', help='Policy Id', required=True)
-@click.option('--version', metavar='', help='Policy version number', required=True)
-@click.option('-n', '--network', metavar='', type=click.Choice(['staging', 'prod'], case_sensitive=False),
-              help='Akamai network (staging or prod)', required=True)
-@pass_config
-def activate_shared_policy(config, network, policy_id, version):
-    """Cloudlets that you can create a shared policy"""
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    df = cloudlet_object.activate_shared_policy(session, network, policy_id, version)
-    if df is not None:
-        columns = ['Policy ID', 'network', 'operation', 'status', 'Policy Version', 'activation ID']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
-
-
-@cli.command(short_help='Show activation history qstatus')
+@cli.command(short_help='Show activation history status')
 @click.option('--policy-id', metavar='', help='Policy Id', required=True)
 @pass_config
 def activation_status(config, policy_id):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     df = cloudlet_object.get_activation_status(session, policy_id=policy_id)
-    # print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
     df.rename(columns={'id': 'activationId', 'policyVersion': 'policy version'}, inplace=True)
     columns = ['policyId', 'activationId', 'network', 'operation', 'policy version', 'finishDate', 'status']
     df.sort_values(by=['network', 'finishDate'], ascending=[True, False], inplace=True)
@@ -892,7 +845,7 @@ def activation_status(config, policy_id):
 @click.option('--cloudlet-type', metavar='', help='cloudlet type', required=False)
 @click.option('--template', metavar='', help='ie. update-policy, create-policy, update-nimbus_policy_version-ALB-1.0', required=False)
 @pass_config
-def policy_endpoints(config, cloudlet_type, template):
+def policy_endpoint(config, cloudlet_type, template):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_schema(session, cloudlet_type, template)

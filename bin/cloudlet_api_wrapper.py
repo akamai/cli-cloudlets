@@ -98,15 +98,6 @@ class Cloudlet:
             version = response.json()['content'][0]['version']
             return df[columns], version
 
-    def list_shared_policy_activations(self, session, policy_id: int) -> pd.DataFrame:
-        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
-        response = session.get(self.form_url(url))
-        if response.status_code == 200:
-            df = pd.DataFrame(data=response.json()['content'])
-            columns = ['operation', 'policyVersion', 'network', 'createdDate']
-            df.sort_values(by='createdDate', ascending=False, inplace=True)
-            return df[columns]
-
     def get_active_properties(self, session, policy_id) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
         response = session.get(self.form_url(url))
@@ -401,33 +392,31 @@ class Cloudlet:
         cloudlet_policy_activate_response = session.post(self.form_url(url), json.dumps(data), headers=headers)
         return cloudlet_policy_activate_response
 
-    def list_policy_activations(self, session, policy_id, network):
-        """Function to fetch activation details of policy"""
-        url = f'https:///cloudlets/api/v2/policies/{policy_id}/activations?network={network}'
-        policy_activations_response = session.get(self.form_url(url))
-        return policy_activations_response
-
-    def activate_shared_policy(self, session, network: str, policy_id: int, version: int) -> pd.DataFrame:
+    def activate_shared_policy(self, session, network: str, policy_id: int, version: int | None = None) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
         payload = {'network': network,
                    'operation': 'ACTIVATION',
-                   'policyVersion': version
-                  }
+                   'policyVersion': version}
         headers = {'accept': 'application/json',
-                   'content-type': 'application/json'
-                  }
+                   'content-type': 'application/json'}
         response = session.post(self.form_url(url), json=payload, headers=headers)
-        if response.status_code == 202:
-            df = pd.DataFrame(data=response.json())
-            return df
-        else:
-            print(response.status_code)
-            print_json(data=response.json())
+        # print_json(data=response.json())
+        return response
+
+    def list_policy_activations(self, session, policy_id: int, network: str):
+        """Function to fetch activation details of policy"""
+        url = f'https:///cloudlets/api/v2/policies/{policy_id}/activations?network={network}'
+        response = session.get(self.form_url(url))
+        return response
+
+    def list_shared_policy_activations(self, session, policy_id: int, activation_id: int):
+        """Function to fetch activation details of shared policy"""
+        url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/{activation_id}'
+        response = session.get(self.form_url(url))
+        return response
 
     def get_activation_status(self, session, policy_id: int) -> pd.DataFrame:
-
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/'
-
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
         if response.status_code == 200:
