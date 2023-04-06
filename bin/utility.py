@@ -15,9 +15,12 @@ from __future__ import annotations
 
 import ast
 import json
+import time
 
 import click
 import pandas as pd
+from rich.live import Live
+from rich.table import Table
 from tabulate import tabulate
 
 
@@ -25,7 +28,7 @@ class Utility:
 
     def do_cloudlet_code_map(self):
         """
-        Function to map cloudlet abbrevations to code/id
+        Function to map cloudlet abbreviations to code/id
 
         Parameters
         -----------
@@ -209,6 +212,83 @@ class Utility:
         if row['network'] == 'staging':
             return staging_version
         return production_version
+
+    def activation_table(self, policy) -> Table:
+        """Make a new table."""
+        table = Table()
+        table.add_column('policy id')
+        table.add_column('version')
+        table.add_column('network')
+
+        try:
+            if policy['id']:
+                table.add_column('activation id')
+        except:
+            pass
+
+        table.add_column('status')
+
+        try:
+            status = policy['status']
+        except:
+            status = policy['policyInfo']['status']
+
+        try:
+            if policy['id']:
+                table.add_row(f"{policy['policyId']}", f"{policy['policyVersion']}", f"{policy['network']}",
+                              f"{policy['id']}",
+                              f'[red]{status}' if status == 'IN_PROGRESS' else '[green]SUCCESS'
+                             )
+        except:
+            table.add_row(f"{policy['policyInfo']['policyId']}", f"{policy['policyInfo']['version']}", f"{policy['network']}",
+                          f'[red]{status}' if status == 'pending' else '[green]active'
+                          )
+        return table
+
+    def poll_activation(self, session, cloudlet_object, json_response, type, network: str | None = None):
+
+        try:
+            policy_id = json_response['policyId']
+        except:
+            policy_id = json_response['policyInfo']['policyId']
+
+        try:
+            activation_id = json_response['id']
+        except:
+            activation_id = 0
+            msg = 'API v2 do not have activation_id'
+
+        with Live(self.activation_table(json_response), refresh_per_second=1) as live:
+            in_progress = True
+            while in_progress:
+                # determine to use API v2 or v3
+                if type == ' ':
+                    status_code, temp_response = cloudlet_object.list_policy_activation(session,
+                                                                                    policy_id,
+                                                                                    network=network)
+
+                    if isinstance(temp_response, list):
+                        response = temp_response[0]
+                    else:
+                        response = temp_response
+                    if status_code == 200:
+                        if response['policyInfo']['status'] != 'pending':
+                            in_progress = False
+                            end_time = time.perf_counter()
+                else:
+                    status_code, temp_response = cloudlet_object.list_shared_policy_activation(session,
+                                                                                    policy_id,
+                                                                                    activation_id)
+                    response = temp_response
+                    if status_code == 200:
+                        if temp_response['status'] != 'IN_PROGRESS':
+                            in_progress = False
+                            end_time = time.perf_counter()
+                time.sleep(30)
+                live.update(self.activation_table(response))
+                print('Polling every 30 seconds...')
+
+            return end_time
 
 
 class PythonLiteralOption(click.Option):

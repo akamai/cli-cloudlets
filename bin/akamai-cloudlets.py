@@ -771,6 +771,9 @@ def activate(config, policy_id, policy, version, add_properties, network):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     utility_object = Utility()
+    if network == 'production':
+        network = 'prod'
+
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
     type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
                                                                                          cloudlet_object,
@@ -791,54 +794,102 @@ def activate(config, policy_id, policy, version, add_properties, network):
 
     start_time = time.perf_counter()
     if type == ' ':
-        activation_response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
-                                                                      version=version, network=network.upper(),
-                                                                      additionalPropertyNames=additionalPropertyNames)
-    else:
-        activation_response = cloudlet_object.activate_shared_policy(session, policy_id=policy_id, version=version, network=network.upper())
+        root_logger.info(f'x {version} {network} {policy_name} {policy_id}')
+        response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
+                                                           version=version, network=network,
+                                                           additionalPropertyNames=additionalPropertyNames)
+        if response.status_code != 200:
+            print(f'{response.json()["errorMessage"]}')
+            exit(-1)
+        else:
+            activation_response = response.json()[0]
+            network = network.lower()
 
-    if activation_response.status_code != 202:
-        print(activation_response.status_code)
-        print_json(data=activation_response.json())
     else:
-        activation_id = activation_response.json()['id']
-        status = 'IN_PROGRESS'
-        # check every 30s to see if activation status for version/network is active
-        while status == 'IN_PROGRESS':
-            response = cloudlet_object.list_shared_policy_activations(session, policy_id, activation_id)
-            if response.status_code == 200:
-                try:
-                    activation = response.json()
-                    if activation['status'] == 'SUCCESS':
-                        root_logger.info('Successfully activated policy version')
-                        end_time = time.perf_counter()
-                        elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
-                        msg = f'Successfully policy {policy_id} on Akamai {network} network'
-                        root_logger.info(f'Activation Duration: {elapse_time} {msg}')
-                        break
-                    else:
-                        root_logger.info('polling 30s...')
-                        time.sleep(5)
-                except:
-                    break
-            else:
-                root_logger.info('ERROR: Unable to retrieve activation status')
-                exit(-1)
+        network = network.upper()
+        response = cloudlet_object.activate_shared_policy(session, policy_id=policy_id, version=version, network=network)
+        activation_response = response.json()
+        activation_response_status_code = response.status_code
+        root_logger.info(f'{activation_response_status_code} {network} {policy_name} {policy_id}')
+        if activation_response_status_code != 202:
+            root_logger.info(f'{activation_response["errorMessage"]}')
+            exit(-1)
+
+    try:
+        end_time = utility_object.poll_activation(session, cloudlet_object, activation_response, type, network=network)
+    except:
+        root_logger.info('ERROR: Unable to retrieve activation status')
+        exit(-1)
+    elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+    root_logger.info(f'Activation Duration: {elapse_time}')
+    msg = f'Successfully activate policy id {policy_id} on Akamai {network} network'
+    root_logger.info(f'{msg}')
 
     return 0
 
 
 @cli.command(short_help='Show activation history status')
 @click.option('--policy-id', metavar='', help='Policy Id', required=True)
+@click.option('--network', metavar='', type=click.Choice(['staging', 'production'], case_sensitive=False),
+              help='Akamai network (staging or production)', required=False)
 @pass_config
-def activation_status(config, policy_id):
+def activation_status(config, policy_id, network):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    df = cloudlet_object.get_activation_status(session, policy_id=policy_id)
-    df.rename(columns={'id': 'activationId', 'policyVersion': 'policy version'}, inplace=True)
-    columns = ['policyId', 'activationId', 'network', 'operation', 'policy version', 'finishDate', 'status']
-    df.sort_values(by=['network', 'finishDate'], ascending=[True, False], inplace=True)
-    print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+    status_code, response = cloudlet_object.list_policy_activation(session, policy_id)
+    df = pd.DataFrame()
+    if status_code == 200:
+        if len(response) == 0:
+            root_logger.info('no activation history')
+            exit(-1)
+        else:
+            df = pd.DataFrame(response)
+            if network:
+                if network == 'production':
+                    networks = ['prod']
+                else:
+                    networks = [network]
+            else:
+                networks = ['staging', 'prod']
+            for network in networks:
+                network_temp_df = df[df['network'] == network]
+                if network_temp_df.empty:
+                    root_logger.info(f'no activation history on {network} network')
+                else:
+                    policy = network_temp_df['policyInfo'].values.tolist()
+                    policy_df = pd.DataFrame(policy)
+                    if not policy_df.empty:
+                        policy_df['activationDate'] = pd.to_datetime(policy_df['activationDate'], unit='ms')
+                        root_logger.info(f'{network} network')
+                        root_logger.info(tabulate(policy_df, headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                    '''
+                    property = network_df['propertyInfo'].values.tolist()
+                    property_df = pd.DataFrame(property)
+                    property_df['activationDate'] = pd.to_datetime(property_df['activationDate'], unit='ms')
+                    root_logger.info(tabulate(property_df, headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                    '''
+    if df.empty:
+        shared_policy_response = cloudlet_object.get_activation_status(session, policy_id=policy_id)
+        if shared_policy_response.status_code == 200:
+            try:
+                df = pd.DataFrame(shared_policy_response.json()['content'])
+            except:
+                print('no activation history')
+            if network:
+                networks = [network.upper()]
+            else:
+                networks = ['STAGING', 'PRODUCTION']
+            df.rename(columns={'id': 'activationId', 'policyVersion': 'policy version'}, inplace=True)
+            columns = ['network', 'policy version', 'operation', 'status', 'activationId', 'finishDate', 'createdBy']
+            for network in networks:
+                temp_df = df[df['network'] == network.upper()]
+                if not temp_df.empty:
+                    root_logger.info(f'Share policy {network} network')
+                    root_logger.info(tabulate(temp_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                else:
+                    root_logger.info(f'no activation history in {network} network')
+        else:
+            root_logger.info('no activation history')
 
 
 @cli.command(short_help='Cloudlet policies API endpoints specification')

@@ -17,6 +17,7 @@ import json
 
 import pandas as pd
 from rich import print_json
+from rich.live import Live
 from tabulate import tabulate
 
 
@@ -382,15 +383,17 @@ class Cloudlet:
                                 'cloudletName': 'name'}, inplace=True)
             return df[['name', 'code']]
 
-    def activate_policy_version(self, session, policy_id, version, additionalPropertyNames=[], network='staging'):
+    def activate_policy_version(self, session, policy_id, version, network: str, additionalPropertyNames: list | None = None):
         """Function to activate a policy version"""
-        headers = {'Content-Type': 'application/json'}
+        headers = {'accept': 'application/json',
+                   'content-type': 'application/json'}
         data = dict()
         data['network'] = network
-        data['additionalPropertyNames'] = additionalPropertyNames
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}/activations'
-        cloudlet_policy_activate_response = session.post(self.form_url(url), json.dumps(data), headers=headers)
-        return cloudlet_policy_activate_response
+        if additionalPropertyNames:
+            data['additionalPropertyNames'] = additionalPropertyNames
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}/activations?async=true'
+        response = session.post(self.form_url(url), json=data, headers=headers)
+        return response
 
     def activate_shared_policy(self, session, network: str, policy_id: int, version: int | None = None) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
@@ -403,27 +406,27 @@ class Cloudlet:
         # print_json(data=response.json())
         return response
 
-    def list_policy_activations(self, session, policy_id: int, network: str):
+    def list_policy_activation(self, session, policy_id: int, network: str | None = None):
         """Function to fetch activation details of policy"""
-        url = f'https:///cloudlets/api/v2/policies/{policy_id}/activations?network={network}'
-        response = session.get(self.form_url(url))
-        return response
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/activations'
+        if network:
+            url = f'{url}/?network={network}&offset=0&pageSize=100'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        # print(f'{response.status_code}\n{response.url}\n{response.text}')
+        return response.status_code, response.json()
 
-    def list_shared_policy_activations(self, session, policy_id: int, activation_id: int):
+    def list_shared_policy_activation(self, session, policy_id: int, activation_id: int):
         """Function to fetch activation details of shared policy"""
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/{activation_id}'
         response = session.get(self.form_url(url))
-        return response
+        return response.status_code, response.json()
 
     def get_activation_status(self, session, policy_id: int) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/'
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
-        if response.status_code == 200:
-            df = pd.DataFrame(data=response.json()['content'])
-            return df
-        else:
-            print_json(data=response.json())
+        return response
 
     def form_url(self, url):
         # This is to ensure accountSwitchKey works for internal users
