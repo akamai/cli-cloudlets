@@ -214,16 +214,18 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
         df.reset_index(drop=True, inplace=True)
 
     if optjson:
-        print_json(df.to_json(orient='records'))
+        if not df.empty:
+            print_json(df.to_json(orient='records'))
     elif optcsv:
-        df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
-        with open('temp_output.csv') as f:
-            for line in f:
-                print(line.rstrip())
-        os.remove('temp_output.csv')
+        if not df.empty:
+            df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
+            with open('temp_output.csv') as f:
+                for line in f:
+                    print(line.rstrip())
+            os.remove('temp_output.csv')
     else:
-        print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
-        pass
+        if not df.empty:
+            print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
 
     root_logger.info(f'{len(df.index)} policies found')
 
