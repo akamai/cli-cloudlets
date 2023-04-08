@@ -124,32 +124,37 @@ def cli(config, edgerc, section, account_key):
     config.account_key = account_key
 
 
-@cli.command(short_help='List all cloudlets code')
+@cli.command(short_help='List available cloudlets')
 @pass_config
 def cloudlets(config):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     policy_df = cloudlet_object.get_schema(session)
-    shared_df = cloudlet_object.available_shared_policies(session)
-    shared_df['policy'] = '* shared'
+    if not policy_df.empty:
+        shared_df = cloudlet_object.available_shared_policies(session)
+        if not shared_df.empty:
+            shared_df['policy'] = '* shared'
+        else:
+            exit(-1)
 
-    stack = pd.concat([policy_df, shared_df], axis=0)
-    stack.fillna('', inplace=True)
-    stack.sort_values(by=['code', 'policy'], inplace=True)
-    stack['count'] = stack.groupby('code')['code'].transform('count')
+        stack = pd.concat([policy_df, shared_df], axis=0)
+        stack.fillna('', inplace=True)
+        stack.sort_values(by=['code', 'policy'], inplace=True)
+        stack['count'] = stack.groupby('code')['code'].transform('count')
 
-    stack.reset_index(drop=True, inplace=True)
-    stack['name'] = stack['name'].str.replace('_', ' ')
-    stack['name'] = stack['name'].str.title()
+        stack.reset_index(drop=True, inplace=True)
+        stack['name'] = stack['name'].str.replace('_', ' ')
+        stack['name'] = stack['name'].str.title()
 
-    # combine and if code is duplicated, remove cloudlets that are not shared policy
-    df1 = stack[stack['count'] == 1]
-    df2 = stack[stack['policy'] == '* shared']
-    df3 = pd.concat([df1, df2], axis=0)
-    df3.sort_values(by=['code', 'policy'], inplace=True)
-    df3.reset_index(drop=True, inplace=True)
-    columns = ['name', 'code', 'policy']
-    print(tabulate(df3[columns], headers='keys', tablefmt='psql', showindex=False))
+        # combine and if code is duplicated, remove cloudlets that are not shared policy
+        df1 = stack[stack['count'] == 1]
+        df2 = stack[stack['policy'] == '* shared']
+        df3 = pd.concat([df1, df2], axis=0)
+        df3.sort_values(by=['code', 'policy'], inplace=True)
+        df3.reset_index(drop=True, inplace=True)
+        columns = ['name', 'code', 'policy']
+        if not df3.empty:
+            root_logger.info(tabulate(df3[columns], headers='keys', tablefmt='psql', showindex=False))
 
 
 @cli.command(short_help='List policies')
@@ -658,7 +663,7 @@ def clone_api_v2(config, version, policy_id, policy, notes, new_group_name, new_
     return 0
 
 
-@cli.command(short_help='Clone policy using API v3')
+@cli.command(short_help='Clone policy from an existing policy using API v3')
 @click.option('--policy-id', metavar='', type=int, help='Policy Id', required=True)
 @click.option('--version', metavar='', cls=PythonLiteralOption, help='Policy version numbers to be cloned from i.e. [1] or [1,2,3]', default=[], required=False)
 @click.option('--group-id', metavar='', type=int, help='Group ID of new policy', required=True)

@@ -17,7 +17,6 @@ import json
 
 import pandas as pd
 from rich import print_json
-from rich.live import Live
 from tabulate import tabulate
 
 
@@ -90,7 +89,6 @@ class Cloudlet:
 
         if response.status_code == 200:
             data = response.json()['content']
-            # print_json(data=data)
             df = pd.DataFrame(data)
             df.rename(columns={'description': 'version notes',
                                'immutable': 'lock'}, inplace=True)
@@ -316,10 +314,10 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
         response = session.get(self.form_url(url), headers=headers)
         df = pd.DataFrame(response.json())
-        if df.empty:
-            print('empty')
-        else:
+        if not df.empty:
             df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
+        else:
+            return pd.DataFrame()
 
         if cloudlet_type:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
@@ -329,10 +327,10 @@ class Cloudlet:
             df = df[df['code'] == cloudlet_type]
 
         columns = ['name', 'code']
-        # print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
         if cloudlet_type:
-            columns = ['action', 'endpoint']
-            print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
+            if not schemas_df.empty:
+                columns = ['action', 'endpoint']
+                print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
 
         if template:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
@@ -340,35 +338,35 @@ class Cloudlet:
             spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
             dft = spec_df.T
 
-            print('\n\n\nFields infomation')
+            print('\n\n\nFields information')
             properties = dft['properties'].values.tolist()
-            pdf = pd.DataFrame(properties)
-            pdf.fillna('', inplace=True)
-            print(tabulate(pdf, headers='keys', showindex=True, tablefmt='psql'))
+            properties_df = pd.DataFrame(properties)
+            properties_df.fillna('', inplace=True)
+            print(tabulate(properties_df, headers='keys', showindex=True, tablefmt='psql'))
 
             try:
                 print('\n\n\nmatchRuleType')
                 matchRuleType = response.json()['definitions']['matchRuleType']['properties']
-                pdf = pd.DataFrame(matchRuleType)
-                pdf.fillna('', inplace=True)
+                matchrule_df = pd.DataFrame(matchRuleType)
+                matchrule_df.fillna('', inplace=True)
                 columns_1 = ['type', 'name', 'matchURL', 'matchesAlways', 'redirectURL', 'statusCode', 'useIncomingQueryString', 'useIncomingSchemeAndHost']
-                print(tabulate(pdf[columns_1], headers='keys', showindex=True, tablefmt='psql'))
+                print(tabulate(matchrule_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
 
                 columns_2 = ['matches', 'useRelativeUrl']
-                print(tabulate(pdf[columns_2], headers='keys', showindex=True, tablefmt='psql'))
+                print(tabulate(matchrule_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
             except:
                 print('no matchRuleType')
 
             try:
                 print('\n\n\nmatchCriteriaType')
                 matchCriteriaType = response.json()['definitions']['matchCriteriaType']['properties']
-                pdf = pd.DataFrame(matchCriteriaType)
-                pdf.fillna('', inplace=True)
+                criteria_df = pd.DataFrame(matchCriteriaType)
+                criteria_df.fillna('', inplace=True)
                 columns_1 = ['caseSensitive', 'matchValue', 'negate', 'matchOperator', 'checkIPs', 'objectMatchValue']
-                print(tabulate(pdf[columns_1], headers='keys', showindex=True, tablefmt='psql'))
+                print(tabulate(criteria_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
 
                 columns_2 = ['matchType']
-                print(tabulate(pdf[columns_2], headers='keys', showindex=True, tablefmt='psql'))
+                print(tabulate(criteria_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
             except:
                 print('no matchCriteriaType')
 
@@ -379,9 +377,10 @@ class Cloudlet:
         response = session.get(self.form_url(url))
         if response.status_code == 200:
             df = pd.DataFrame(data=response.json())
-            df.rename(columns={'cloudletType': 'code',
-                                'cloudletName': 'name'}, inplace=True)
-            return df[['name', 'code']]
+            if not df.empty:
+                df.rename(columns={'cloudletType': 'code',
+                                    'cloudletName': 'name'}, inplace=True)
+                return df[['name', 'code']]
 
     def activate_policy_version(self, session, policy_id, version, network: str, additionalPropertyNames: list | None = None):
         """Function to activate a policy version"""
