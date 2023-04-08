@@ -124,15 +124,6 @@ def cli(config, edgerc, section, account_key):
     config.account_key = account_key
 
 
-@cli.command()
-@click.pass_context
-def help(ctx):
-    '''
-    Show help information
-    '''
-    print(ctx.parent.get_help())
-
-
 @cli.command(short_help='List all cloudlets code')
 @pass_config
 def cloudlets(config):
