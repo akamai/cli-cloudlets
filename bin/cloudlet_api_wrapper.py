@@ -335,6 +335,7 @@ class Cloudlet:
         if template:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
             response = session.get(self.form_url(url), headers=headers)
+
             spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
             dft = spec_df.T
 
@@ -369,8 +370,7 @@ class Cloudlet:
                 print(tabulate(criteria_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
             except:
                 print('no matchCriteriaType')
-
-        return df
+        return df, response
 
     def available_shared_policies(self, session) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'

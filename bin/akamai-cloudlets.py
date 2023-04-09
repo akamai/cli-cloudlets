@@ -821,16 +821,19 @@ def activation_status(config, policy_id, network):
 
 
 @cli.command(short_help='Cloudlet policies API endpoints specification')
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--cloudlet-type', metavar='', help='cloudlet type', required=False)
 @click.option('--template', metavar='', help='ie. update-policy, create-policy, update-nimbus_policy_version-ALB-1.0', required=False)
 @pass_config
-def policy_endpoint(config, cloudlet_type, template):
+def policy_endpoint(config, cloudlet_type, template, optjson):
     """
     Cloudlet policies API endpoints specification
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_schema(session, cloudlet_type, template)
+    df, response = cloudlet_object.get_schema(session, cloudlet_type, template)
+    if optjson:
+        print_json(data=response.json())
 
 
 def get_prog_name():
