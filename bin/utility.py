@@ -19,6 +19,8 @@ import time
 
 import click
 import pandas as pd
+from openpyxl import load_workbook
+from pandas.io.formats.excel import ExcelFormatter
 from rich.live import Live
 from rich.table import Table
 from tabulate import tabulate
@@ -292,20 +294,55 @@ class Utility:
 
     def proces_matchrules_column(self, df):
         columns = df.columns.tolist()
-        print(columns)
         new_columns = []
         for column in columns:
             if column == 'type':
                 type = df['type'].unique().tolist()[0]
+            if column == 'match_type':
+                match_types = df['match_type'].unique().tolist()
             col = df[column].astype(str).unique().tolist()
-            # col = df[column].tolist()
             if isinstance(col, (list, tuple)):
                 if len(col) > 1:
                     new_columns.append(column)
                 elif len(col) == 1 and col[0] not in [type, '0', 'None', '']:
                     new_columns.append(column)
-        print(f'{type} {new_columns=}')
-        return type, new_columns
+        return type, new_columns, match_types
+
+    def generate_excel(self, filename: str, df1: pd.DataFrame, df2: pd.DataFrame | None = None) -> None:
+        if df2.empty:
+            df_dict = {'match_rules': df1}
+        else:
+            df_dict = {'match_rules': df1, 'match_value': df2}
+        writer = pd.ExcelWriter(filename, engine='xlsxwriter')
+        for sheetname, df in df_dict.items():
+            df.to_excel(writer, sheet_name=sheetname)
+            df.columns = df.columns.str.upper()
+            workbook = writer.book
+            worksheet = writer.sheets[sheetname]
+
+            header_format = workbook.add_format({'bold': True,
+                                                'text_wrap': False,
+                                                'valign': 'top',
+                                                'align': 'middle',
+                                                'fg_color': '#FFC588',  # orange
+                                                'border': 1,
+                                                })
+            index_format = workbook.add_format({'bold': True,
+                                                'text_wrap': False,
+                                                'valign': 'top',
+                                                'align': 'left'
+                                                })
+            # format table headers
+            for col_num, value in enumerate(df.columns.values, 1):
+                worksheet.write(0, col_num, value, header_format)
+
+            # format index column
+            for i, value in enumerate(df.index.values, 1):
+                worksheet.write(i, 0, value, index_format)
+
+            worksheet.freeze_panes(1, 2)
+            worksheet.autofit()
+        writer.close()
 
 
 class PythonLiteralOption(click.Option):

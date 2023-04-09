@@ -18,8 +18,10 @@ import csv
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
+from pathlib import Path
 from time import gmtime
 from time import strftime
 
@@ -233,9 +235,12 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
 @click.option('--version', metavar='', help='Policy version number', required=False)
 @click.option('--policy-id', metavar='', type=int, help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, required=False)
+@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, default=False, required=False)
+@click.option('--show', is_flag=True, default=False,
+              help='Launch Microsoft Excel after automatically (Mac OS Only)',
+              required=False)
 @pass_config
-def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
+def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show):
     """
     Retrieve policy detail version
     """
@@ -252,6 +257,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
         root_logger.info('ERROR: Unable to find existing policy')
         exit(-1)
     else:
+        print()
         root_logger.info(f'Found policy-id {policy_id}, cloudlet policy {policy_name}')
 
     if type == ' ':
@@ -280,13 +286,19 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
 
     if optjson:
         summary = response.json()
-        del summary['matchRules']
+        # del summary['matchRules']
         print_json(data=summary)
     else:
         if not df.empty:
             df.rename(columns={'description': 'notes'}, inplace=True)
             columns = ['policyId', 'version', 'notes', 'modifiedBy', 'modifiedDate']
             root_logger.info(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+
+    # Writing full json
+    json_file = 'policy.json'
+    with open(json_file, 'w') as f:
+        json.dump(response.json(), f, indent=4)
+    root_logger.info(f'Full policy json is saved at {json_file}')
 
     if only_match_rules:
         matchRules = []
@@ -303,40 +315,128 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
             root_logger.info('ERROR: Unable to retrieve matchRules')
             exit(-1)
 
-        if len(matchRules) > 0:
+        if len(matchRules) == 0:
+            print()
+            root_logger.info('no matchrule found')
+            exit(-1)
+        else:
             if optjson:
                 print_json(json.dumps({'matchRules': matchRules}))
+
+                # Writing full json
+                json_file = 'policy_matchrules.json'
+                with open(json_file, 'w') as f:
+                    json.dump({'matchRules': matchRules}, f, indent=4)
+                root_logger.info(f'matchrules policy json is saved at {json_file}')
+
             else:
-                temp_df = pd.DataFrame.from_records(matchRules)
-                temp_df.fillna('', inplace=True)
+                original_df = pd.DataFrame.from_records(matchRules)
 
-                type, columns = utility_object.proces_matchrules_column(temp_df)
-                if 'matches' in columns:
-                    columns.remove('matches')
-                    new_df = temp_df[columns]
-                    matches = temp_df['matches'].tolist()
+                try:
+                    total_rows = original_df.shape[0]
+                    if total_rows == original_df['matchURL'].isna().sum():
+                        del original_df['matchURL']
+                except:
+                    pass
 
-                    clean_matches = []
-                    for x in matches:
-                        if x and len(x) > 0:
-                            clean_matches.append(x[0])
+                if 'matchURL' in original_df.columns:
+                    original_df['match_type'] = ['matchURL' if isinstance(x, str) else 'matchValue' for x in original_df['matchURL']]
+                    if 'matches' in original_df.columns:
+                        original_df['matchURL'].fillna(original_df['matches'], inplace=True)
+                else:
+                    original_df['match_type'] = 'matchValue'
+
+                # temp_df.fillna('', inplace=True)
+                type, columns, match_types = utility_object.proces_matchrules_column(original_df)
+                print()
+                root_logger.info('match rules')
+
+                if 'matches' not in columns:
+                    # --policy-id 163451
+                    sheet1 = original_df[columns]
+                    sheet2 = pd.DataFrame()
+                    print()
+                    root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                else:
+                    new_df = original_df
+                    new_df.fillna('', inplace=True)
+
+                    if len(match_types) == 1 and match_types[0] == 'matchValue':
+                        # --policy-id 183946, 149103
+                        try:
+                            del new_df['matchURL']
+                            columns.remove('matchURL')
+                        except:
+                            "columns doesn't exist"
+
+                        columns.remove('match_type')
+                        columns.remove('matches')
+
+                        subtracted = ['matchType', 'matchOperator', 'matchValue', 'negate', 'caseSensitive']
+                        if 'objectMatchValue' in subtracted:
+                            subtracted = subtracted + ['objectMatchValue.type', 'objectMatchValue.Value']
+                        original_df['length'] = original_df['matches'].str.len()
+
+                        matches = original_df[['name', 'matches']].to_dict('records')
+                        matches_df = pd.json_normalize(matches, 'matches', ['name'])
+                        matches_df['match no.'] = matches_df.assign(ind=1).groupby('name')['ind'].cumsum()
+                        matched_columns = ['name', 'match no.'] + subtracted
+
+                        member = original_df['length'].unique().tolist()
+                        if len(member) == 1 and member[0] == 1:
+                            combine_df = pd.concat([original_df[columns], matches_df[subtracted]], axis=1)
+                            sheet1 = combine_df
+                            sheet2 = pd.DataFrame()
+                            print()
+                            root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+
                         else:
-                            clean_matches.append({'matchValue': '',
-                                                  'matchOperator': '',
-                                                  'negate': '',
-                                                  'caseSensitive': '',
-                                                  'matchType': ''})
-                    matches_df = pd.DataFrame(clean_matches)
-                    matches_df.fillna('', inplace=True)
+                            sheet1 = original_df[columns]
+                            sheet2 = matches_df[matched_columns]
+                            root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                            print()
+                            root_logger.info('matches')
+                            root_logger.info(tabulate(sheet2, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
 
-                    combine_df = pd.concat([new_df, matches_df], axis=1)
-                    root_logger.info(tabulate(combine_df, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                    if len(match_types) == 2:
+                        # --policy-id 161133, 185769, 163388,  163454
+                        root_logger.info('...found both matchURL and matches')
+                        new_df = original_df
+                        new_df.fillna('', inplace=True)
+                        del new_df['matches']
+                        columns.remove('matches')
 
-                file_location = 'policy.xlsx'
-                with pd.ExcelWriter(file_location, engine='xlsxwriter') as writer:
-                    combine_df.to_excel(writer, sheet_name='Sheet1')
-                root_logger.info(f'{file_location=}')
+                        # use .loc and copy() to avoid SettingWithCopyWarning
+                        # new_df = original_df[original_df['match_type'] == 'matchValue']
+                        new_df = original_df.loc[original_df['match_type'] == 'matchValue'].copy()
+                        del new_df['match_type']
 
+                        new_df.rename(columns={'matchURL': 'matches'}, inplace=True)
+                        matched_columns = new_df[['matches']].columns.to_list()
+
+                        subtracted = ['matchType', 'matchOperator', 'matchValue', 'negate', 'caseSensitive']
+                        if 'objectMatchValue' in subtracted:
+                            subtracted = subtracted + ['objectMatchValue.type', 'objectMatchValue.Value']
+
+                        matches = new_df[['name', 'matches']].to_dict('records')
+                        matches_df = pd.json_normalize(matches, 'matches', ['name'])
+
+                        matches_df['match no.'] = matches_df.assign(ind=1).groupby('name')['ind'].cumsum()
+                        matched_columns = ['name', 'match no.'] + subtracted
+                        combine_df = pd.merge(left=original_df[columns], right=matches_df[matched_columns], on='name')
+                        sheet1 = original_df[columns]
+                        sheet2 = matches_df[matched_columns]
+                        root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                        print()
+                        root_logger.info('matches')
+                        root_logger.info(tabulate(sheet2, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+
+                filename = 'policy_matchrules.xlsx'
+                file_location = Path(filename).absolute()
+                utility_object.generate_excel(file_location, sheet1, sheet2)
+                root_logger.info(f'Matchrules is saved at {file_location}')
+                if show:
+                    subprocess.check_call(['open', '-a', 'Microsoft Excel', file_location])
     return 0
 
 
@@ -361,6 +461,7 @@ def status(config, policy_id, policy):
         root_logger.info('ERROR: Unable to find existing policy')
         exit(-1)
     else:
+        print()
         root_logger.info(f'Found policy-id {policy_id}, cloudlet policy {policy_name}')
 
     if not policy_info:
