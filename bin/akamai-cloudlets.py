@@ -127,6 +127,9 @@ def cli(config, edgerc, section, account_key):
 @cli.command(short_help='List available cloudlets')
 @pass_config
 def cloudlets(config):
+    """
+    List available cloudlets
+    """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     policy_df = cloudlet_object.get_schema(session)
@@ -239,7 +242,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
 @pass_config
 def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
     """
-    Retrieve policy version
+    Retrieve policy detail version
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -427,7 +430,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules):
 @pass_config
 def status(config, policy_id, policy):
     """
-    Show status for a specific policy
+    Show policy status with property manager version, if any
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -672,6 +675,9 @@ def clone_api_v2(config, version, policy_id, policy, notes, new_group_name, new_
 @click.option('--new-policy', metavar='', help='New Policy Name', required=True)
 @pass_config
 def clone(config, version, policy_id, group_id, new_policy):
+    """
+    Clone policy from an existing policy using API v3
+    """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     if not version:
@@ -754,7 +760,7 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
     return 0
 
 
-@cli.command(short_help='Activate policy version')
+@cli.command(short_help='Activate a policy version')
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--version', metavar='', help='Policy version', required=False)
@@ -832,6 +838,9 @@ def activate(config, policy_id, policy, version, add_properties, network):
               help='Akamai network (staging or production)', required=False)
 @pass_config
 def activation_status(config, policy_id, network):
+    """
+    Show activation history status
+    """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     status_code, response = cloudlet_object.list_policy_activation(session, policy_id)
@@ -895,6 +904,9 @@ def activation_status(config, policy_id, network):
 @click.option('--template', metavar='', help='ie. update-policy, create-policy, update-nimbus_policy_version-ALB-1.0', required=False)
 @pass_config
 def policy_endpoint(config, cloudlet_type, template):
+    """
+    Cloudlet policies API endpoints specification
+    """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_schema(session, cloudlet_type, template)
