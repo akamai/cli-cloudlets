@@ -241,7 +241,7 @@ class Cloudlet:
             df = pd.DataFrame.from_dict(policy, orient='index')
             df.rename(columns={'description': 'notes'}, inplace=True)
             transposed_df = df.T
-        return transposed_df
+        return transposed_df, policy_version_response
 
     def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version='optional'):
         """Function to create a policy version"""

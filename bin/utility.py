@@ -290,6 +290,23 @@ class Utility:
 
             return end_time
 
+    def proces_matchrules_column(self, df):
+        columns = df.columns.tolist()
+        print(columns)
+        new_columns = []
+        for column in columns:
+            if column == 'type':
+                type = df['type'].unique().tolist()[0]
+            col = df[column].astype(str).unique().tolist()
+            # col = df[column].tolist()
+            if isinstance(col, (list, tuple)):
+                if len(col) > 1:
+                    new_columns.append(column)
+                elif len(col) == 1 and col[0] not in [type, '0', 'None', '']:
+                    new_columns.append(column)
+        print(f'{type} {new_columns=}')
+        return type, new_columns
+
 
 class PythonLiteralOption(click.Option):
 
