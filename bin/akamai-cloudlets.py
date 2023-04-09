@@ -132,32 +132,27 @@ def cloudlets(config):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    policy_df = cloudlet_object.get_schema(session)
-    if not policy_df.empty:
-        shared_df = cloudlet_object.available_shared_policies(session)
-        if not shared_df.empty:
-            shared_df['policy'] = '* shared'
-        else:
-            exit(-1)
+    policy_df, _ = cloudlet_object.get_schema(session)
+    shared_df = cloudlet_object.available_shared_policies(session)
+    shared_df['policy'] = '* shared'
 
-        stack = pd.concat([policy_df, shared_df], axis=0)
-        stack.fillna('', inplace=True)
-        stack.sort_values(by=['code', 'policy'], inplace=True)
-        stack['count'] = stack.groupby('code')['code'].transform('count')
+    stack = pd.concat([policy_df, shared_df], axis=0)
+    stack.fillna('', inplace=True)
+    stack.sort_values(by=['code', 'policy'], inplace=True)
+    stack['count'] = stack.groupby('code')['code'].transform('count')
 
-        stack.reset_index(drop=True, inplace=True)
-        stack['name'] = stack['name'].str.replace('_', ' ')
-        stack['name'] = stack['name'].str.title()
+    stack.reset_index(drop=True, inplace=True)
+    stack['name'] = stack['name'].str.replace('_', ' ')
+    stack['name'] = stack['name'].str.title()
 
-        # combine and if code is duplicated, remove cloudlets that are not shared policy
-        df1 = stack[stack['count'] == 1]
-        df2 = stack[stack['policy'] == '* shared']
-        df3 = pd.concat([df1, df2], axis=0)
-        df3.sort_values(by=['code', 'policy'], inplace=True)
-        df3.reset_index(drop=True, inplace=True)
-        columns = ['name', 'code', 'policy']
-        if not df3.empty:
-            root_logger.info(tabulate(df3[columns], headers='keys', tablefmt='psql', showindex=False))
+    # combine and if code is duplicated, remove cloudlets that are not shared policy
+    df1 = stack[stack['count'] == 1]
+    df2 = stack[stack['policy'] == '* shared']
+    df3 = pd.concat([df1, df2], axis=0)
+    df3.sort_values(by=['code', 'policy'], inplace=True)
+    df3.reset_index(drop=True, inplace=True)
+    columns = ['name', 'code', 'policy']
+    root_logger.info(tabulate(df3[columns], headers='keys', tablefmt='psql', showindex=False))
 
 
 @cli.command(short_help='List policies')
