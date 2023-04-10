@@ -4,3 +4,7 @@
 .vscode
 logs
 *.log
+*.xlsx
+*.json
+*.sh
+!cli.json
