@@ -71,6 +71,9 @@ Main program file that wraps this functionality in a command line utility:
 - [create-policy](#create-policy)
 - [clone](#clone)
 - [status](#status)
+- cloudlets TBD
+- activation-status TBD
+- policy-endpoint TBD
 
 ## Global Flags
 
