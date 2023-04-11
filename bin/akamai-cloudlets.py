@@ -18,6 +18,7 @@ import csv
 import json
 import logging
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -135,26 +136,33 @@ def cloudlets(config):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     policy_df, _ = cloudlet_object.get_schema(session)
+
     shared_df = cloudlet_object.available_shared_policies(session)
-    shared_df['policy'] = '* shared'
+    if shared_df.empty:
+        if policy_df.empty:
+            root_logger.info('This account does not have access to any cloudlets')
+        else:
+            root_logger.info(tabulate(policy_df, headers='keys', tablefmt='psql', showindex=False))
+    else:
+        shared_df['policy'] = '* shared'
 
-    stack = pd.concat([policy_df, shared_df], axis=0)
-    stack.fillna('', inplace=True)
-    stack.sort_values(by=['code', 'policy'], inplace=True)
-    stack['count'] = stack.groupby('code')['code'].transform('count')
+        stack = pd.concat([policy_df, shared_df], axis=0)
+        stack.fillna('', inplace=True)
+        stack.sort_values(by=['code', 'policy'], inplace=True)
+        stack['count'] = stack.groupby('code')['code'].transform('count')
 
-    stack.reset_index(drop=True, inplace=True)
-    stack['name'] = stack['name'].str.replace('_', ' ')
-    stack['name'] = stack['name'].str.title()
+        stack.reset_index(drop=True, inplace=True)
+        stack['name'] = stack['name'].str.replace('_', ' ')
+        stack['name'] = stack['name'].str.title()
 
-    # combine and if code is duplicated, remove cloudlets that are not shared policy
-    df1 = stack[stack['count'] == 1]
-    df2 = stack[stack['policy'] == '* shared']
-    df3 = pd.concat([df1, df2], axis=0)
-    df3.sort_values(by=['code', 'policy'], inplace=True)
-    df3.reset_index(drop=True, inplace=True)
-    columns = ['name', 'code', 'policy']
-    root_logger.info(tabulate(df3[columns], headers='keys', tablefmt='psql', showindex=False))
+        # combine and if code is duplicated, remove cloudlets that are not shared policy
+        df1 = stack[stack['count'] == 1]
+        df2 = stack[stack['policy'] == '* shared']
+        df3 = pd.concat([df1, df2], axis=0)
+        df3.sort_values(by=['code', 'policy'], inplace=True)
+        df3.reset_index(drop=True, inplace=True)
+        columns = ['name', 'code', 'policy']
+        root_logger.info(tabulate(df3[columns], headers='keys', tablefmt='github', showindex=False))
 
 
 @cli.command(short_help='List policies')
@@ -231,14 +239,16 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
 
 
 @cli.command(short_help='Retrieve policy detail version')
-@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
-@click.option('--version', metavar='', help='Policy version number', required=False)
-@click.option('--policy-id', metavar='', type=int, help='Policy Id', required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--only-match-rules', metavar='', help='Retrieve only match rules section of policy version', is_flag=True, default=False, required=False)
-@click.option('--show', is_flag=True, default=False,
-              help='Launch Microsoft Excel after automatically (Mac OS Only)',
+@click.option('--version', metavar='',
+              help='Policy version number  (If not specified, CLI will show the latest version, if exists)',
               required=False)
+@click.option('--policy', metavar='', help='Policy Name', required=False)
+@click.option('--policy-id', metavar='', type=int, help='Policy Id', required=False)
+@click.option('--only-match-rules', metavar='', help='Only return the rules section object  (Optional)', is_flag=True, default=False, required=False)
+@click.option('--show', is_flag=True, default=False,
+              help='Automatically launch Microsoft Excel after (Mac OS Only)',
+              required=False)
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @pass_config
 def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show):
     """
@@ -436,7 +446,10 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                 utility_object.generate_excel(file_location, sheet1, sheet2)
                 root_logger.info(f'Matchrules is saved at {file_location}')
                 if show:
-                    subprocess.check_call(['open', '-a', 'Microsoft Excel', file_location])
+                    if platform.system() != 'Darwin':
+                        root_logger.info('--show argument is supported only on Mac OS')
+                    else:
+                        subprocess.check_call(['open', '-a', 'Microsoft Excel', file_location])
     return 0
 
 
@@ -711,12 +724,12 @@ def clone(config, version, policy_id, group_id, new_policy):
 
 @cli.command(short_help='Update new policy version with rules')
 @click.option('--group-id', metavar='', help='Group ID without ctr_ prefix', required=False)
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
+@click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--notes', metavar='', help='Policy version notes', required=False)
 @click.option('--version', metavar='', help='Policy version to update otherwise creates new version', required=False)
 @click.option('--file', metavar='', help='JSON file with policy data', required=False)
-@click.option('--share', help='Shared policy', is_flag=True, default=False)
+@click.option('--share', help='Shared policy.  This flag is required if you update a share policy', is_flag=True, default=False)
 @pass_config
 def update(config, group_id, policy_id, policy, notes, version, file, share):
     """
@@ -731,9 +744,15 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
                                                                cloudlet_object,
                                                                policy_name=policy,
                                                                policy_id=policy_id)
+
+    if file:
+        with open(file) as f:
+            update_json_content = json.loads(f.read())
     if share:
         if version:
-            update_response = cloudlet_object.update_shared_policy_detail(session, policy_id, version, notes)
+            update_response = cloudlet_object.update_shared_policy_detail(session, policy_id, version,
+                                                                          match_rules=update_json_content,
+                                                                          notes=notes)
             if update_response.status_code == 409:
                 root_logger.info(f"{update_response.json()['errors'][0]['detail']}")
             elif update_response.status_code == 200:
@@ -742,6 +761,10 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
                 print_json(data=update_response.json())
                 root_logger.info(f'Not able to update policy {policy_name} v{version}')
         else:
+            if not group_id:
+                root_logger.error('without --version, --group_id argument is required')
+                exit(-1)
+
             update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
             if update_response.status_code == 400:
                 print_json(data=update_response.json())
@@ -749,28 +772,23 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
             else:
                 root_logger.info(f'Updating policy {policy_name}')
     else:
-        if file:
-            with open(file) as update_content:
-                update_json_content = json.load(update_content)
+
         update_json_content = {'description': notes} if notes else {'description': 'update by cloudlets cli'}
 
         if version:
             # update the provided version
             update_response = cloudlet_object.update_policy_version(session, policy_id, version, data=update_json_content)
-            print_json(data=update_response.json())
-            if update_response.status_code == 200:
-                root_logger.info(f'Updating policy {policy_name} v{version}')
         else:
             # create and update a new version
             update_response = cloudlet_object.create_clone_policy_version(session, policy_id, json.dumps(update_json_content))
-            print_json(data=update_response.json())
 
         if update_response.status_code == 201:
             version = update_response.json()['version']
             root_logger.info(f'create and update a new version {version}')
         elif update_response.status_code == 200:
-            root_logger.info('Successfully updated policy version')
+            root_logger.info(f'Successfully updated policy version {policy_name} v{version}')
         else:
+            print_json(data=update_response.json())
             root_logger.info('ERROR: Unable to update policy')
             exit(-1)
 

@@ -282,28 +282,16 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=payload, headers=headers)
         return response
 
-    def update_shared_policy_detail(self, session, policy_id: int, version: int, notes: str | None = None):
+    def update_shared_policy_detail(self, session, policy_id: int, version: int, match_rules: list, notes: str | None = None):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions/{version}'
         headers = {'accept': 'application/json',
                    'content-type': 'application/json'
                   }
         if notes is None:
             notes = 'CLI cloudlet update'
-
         payload = {'configuration': {'originNewVisitorLimit': 1000},
                    'description': notes,
-                   'matchRules': [{'type': 'erMatchRule',
-                                   'disabled': False,
-                                   'end': 0,
-                                   'name': 'Redirect images',
-                                   'matchURL': '/images/*',
-                                   'redirectURL': '/static/images/*',
-                                   'start': 0,
-                                   'statusCode': 302,
-                                   'useIncomingQueryString': True,
-                                   'useRelativeUrl': 'relative_url'
-                                  }
-                                 ],
+                   'matchRules': match_rules,
                   }
         response = session.put(self.form_url(url), json=payload, headers=headers)
         return response
@@ -317,7 +305,7 @@ class Cloudlet:
         if not df.empty:
             df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
         else:
-            return pd.DataFrame()
+            return pd.DataFrame(), response
 
         if cloudlet_type:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
@@ -381,6 +369,7 @@ class Cloudlet:
                 df.rename(columns={'cloudletType': 'code',
                                     'cloudletName': 'name'}, inplace=True)
                 return df[['name', 'code']]
+        return pd.DataFrame()
 
     def activate_policy_version(self, session, policy_id, version, network: str, additionalPropertyNames: list | None = None):
         """Function to activate a policy version"""
