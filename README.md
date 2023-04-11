@@ -1,21 +1,25 @@
 # cli-cloudlets
+
 Provides a way to interact with the Akamai Cloudlets via Open APIs. Provides various functionality such as searching policies, retrieving, updating, and activating policy versions.
 
 ## Akamai CLI Install
+
 ```bash
 %  akamai install cloudlets
 ```
 
 ## Requirements
-* Python 3+
-* pip install edgegrid-python
 
+- Python 3+
+- pip install edgegrid-python
 
-### Credentials
+## Prerequisites - Setup API Credentials
+
 In order to use this module, you need to:
-* Set up your credential files as described in the [authorization](https://developer.akamai.com/introduction/Prov_Creds.html) and [credentials](https://developer.akamai.com/introduction/Conf_Client.html) sections of the getting started guide on developer.akamai.com.
-* When working through this process you need to give your API credential the "Cloudlets Policy Manager" grant.  The section in your configuration file should be called 'cloudlets'.
-* You may also use the --section <name> to use the specific section credentials from your .edgerc file
+
+- Set up your credential `.edgerc` files as described in the [Create authentication credentials](https://techdocs.akamai.com/developer/docs/set-up-authentication-credentials)
+- When working through this process you need to give your API credential the `Cloudlets Policy Manager` grant. The section in your configuration file should be called `cloudlets`.
+- If you wish to override, you may also use the `--section <section_name>` to use the specific section credentials from your `.edgerc` file
 
 ```
 [cloudlets]
@@ -25,48 +29,51 @@ access_token = [ACCESS_TOKEN_HERE]
 client_token = [CLIENT_TOKEN_HERE]
 ```
 
-
 ## Functionality
+
 Here is a summary of the current functionality:
-* List all cloudlet policies
-* List all cloudlet policies (search by name and/or cloudlet-type)
-* Retrieve cloudlet policy version rules
-* Update policy version rules
-* Activate policy version to staging or production network
-* Create a cloudlet policy
-* Clone a cloudlet policy (from an existing one)
+
+- List available cloudlet types based on account
+- List all cloudlet policies (search by name and/or cloudlet-type)
+- Retrieve cloudlet policy version rules
+- Update policy version rules
+- Activate policy version to staging or production network
+- Create a cloudlet policy
+- Clone a cloudlet policy (from an existing one)
+- Get policy endpoints schema
 
 ## Cloudlet Types
-Here is the list of cloudlets and cloudlet type codes. Please reference appropriate cloudlet type code in *[list](#list)* or *[create-policy](#create-policy)* commands
 
-```xml
-API Prioritization = AP
-Application Load Balancer = ALB
-Audience Segmentation = AS
-Edge Redirector = ER
-Forward Rewrite = FR
-Input Validation = IV
-Phased Release = CD
-Request Control = IG
-Visitor Prioritization = VP
-```
+Here is the list of cloudlets and cloudlet type codes. Please reference appropriate cloudlet type code in _[list](#list)_ or _[create-policy](#create-policy)_ commands
 
-
-
-
+| name                      | code | policy    |
+| ------------------------- | ---- | --------- |
+| Application Load Balancer | ALB  |           |
+| API Prioritization        | AP   | \* shared |
+| Audience Segmentation     | AS   | \* shared |
+| Phased Release            | CD   | \* shared |
+| Edge Redirector           | ER   | \* shared |
+| Forward Rewrite           | FR   | \* shared |
+| Request Control           | IG   | \* shared |
+| Input Validation          | IV   |           |
+| Media Math Advanced       | MMA  |           |
+| Media Math Basic          | MMB  |           |
+| Visitor Prioritization    | VP   |           |
 
 ## akamai-cloudlets
-Main program file that wraps this functionality in a command line utility:
-* [list](#list)
-* [retrieve](#retrieve)
-* [update](#update)
-* [activate](#activate)
-* [create-policy](#create-policy)
-* [clone](#clone)
-* [status](#status)
 
+Main program file that wraps this functionality in a command line utility:
+
+- [list](#list)
+- [retrieve](#retrieve)
+- [update](#update)
+- [activate](#activate)
+- [create-policy](#create-policy)
+- [clone](#clone)
+- [status](#status)
 
 ## Global Flags
+
 - `--edgerc value` — Location of the credentials file (default: "/Users/username/.edgerc") [$AKAMAI_EDGERC]
 - `--section value` — Section of the credentials file (default: "cloudlets" default:") [$AKAMAI_EDGERC_SECTION]
 - `--help`, `-h` — show help
@@ -76,9 +83,9 @@ Main program file that wraps this functionality in a command line utility:
 %  akamai cloudlets --section section_name list
 ```
 
-
 ### list
-List all cloudlet policies.
+
+List all cloudlet policies. Result is sorted by policy name (case insensitive)
 Also search by --name-contains or --cloudlet-type (optional)
 Output can be piped to json or csv format (optional)
 
@@ -92,27 +99,34 @@ Output can be piped to json or csv format (optional)
 ```
 
 ### retrieve
+
 Retrieves policy version. Please specify either --policy or --policy-id
+By default, policy will be saved to file `policy.json`
+With argument `--only-match-rules`, information will be displayed in table and saved as `policy_matchrules.xlsx`
+If json format is preferred, you can `--json` argument
 
 ```xml
 %  akamai cloudlets retrieve --policy-id 12345
 %  akamai cloudlets retrieve --policy sample_name
 %  akamai cloudlets retrieve --policy-id 12345 --version 7
 %  akamai cloudlets retrieve --policy-id 12345 --only-match-rules
+%  akamai cloudlets retrieve --policy-id 12345 --only-match-rules --json
 ```
 
 Argument Details:
 
 ```xml
---policy                     Cloudlet policy name
---policy-id                  Cloudlet policy id
---version                    Version number  (Optional: if not specified will return latest version that exists for that policy)
---only-match-rules           Only return the rules section object  (Optional)
+--version            Policy version number  (If not specified, CLI will show the latest version, if exists)
+--policy             Policy name
+--policy-id          Policy id
+--only-match-rules   Only return the rules section object  (Optional)
+--json               Output the policy details in json format
+--show               Automatically launch Microsoft Excel after (Mac OS Only)
 ```
 
-
 ### update
-Update a specific policy with json rules.  Please specify either --policy or --policy-id. Specify a version number otherwise a new policy version will be created and its new version number will be returned.
+
+Update a specific policy with json rules. Please specify either --policy or --policy-id. Specify a version number otherwise a new policy version will be created and its new version number will be returned.
 
 ```xml
 %  akamai cloudlets update --policy sample_name --file rules.json
@@ -131,6 +145,7 @@ Argument Details:
 ```
 
 ### activate
+
 Activate a cloudlet policy version to Akamai staging or production network.
 
 ```xml
@@ -150,8 +165,8 @@ Argument Details:
 --add-properties             Comma separated list of property manager configuration names (Optional: configurations will be associated to the policy which is necessary for first time activation
 ```
 
-
 ### create-policy
+
 Creates a new cloudlet policy
 
 ```xml
@@ -170,8 +185,8 @@ Argument Details:
 --notes                       Notes for cloudlet policy (Optional)
 ```
 
-
 ### clone
+
 Create a new cloudlet policy by cloning from an existing one.
 
 ```xml
@@ -194,8 +209,8 @@ Argument Details:
 ```
 
 ### status
-Shows current status of policy. Please specify either --policy or --policy-id. Displays which version is active on staging and production and associated property manager configurations.
 
+Shows current status of policy. Please specify either --policy or --policy-id. Displays which version is active on staging and production and associated property manager configurations.
 
 ```xml
 %  akamai cloudlets status --policy sample_name
@@ -212,6 +227,12 @@ Argument Details:
 # Contribution
 
 By submitting a contribution (the “Contribution”) to this project, and for good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, you (the “Assignor”) irrevocably convey, transfer, and assign the Contribution to the owner of the repository (the “Assignee”), and the Assignee hereby accepts, all of your right, title, and interest in and to the Contribution along with all associated copyrights, copyright registrations, and/or applications for registration and all issuances, extensions and renewals thereof (collectively, the “Assigned Copyrights”). You also assign all of your rights of any kind whatsoever accruing under the Assigned Copyrights provided by applicable law of any jurisdiction, by international treaties and conventions and otherwise throughout the world.
+
+## Local Install
+
+- Minimum python 3.6 `git clone https://github.com/akamai/cli-cloudlets.git`
+- Create python virtual environment `python3 -m venv .venv`
+- Install required packages `pip3 install -r requirements.txt`
 
 # Notice
 
