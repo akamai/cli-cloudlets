@@ -77,7 +77,7 @@ def init_config(edgerc_file, section):
             edgerc_file = os.getenv('AKAMAI_EDGERC')
 
     if not os.access(edgerc_file, os.R_OK):
-        root_logger.error("ERROR: Unable to read edgerc file \"%s\"" % edgerc_file)
+        root_logger.error(f'ERROR: Unable to read edgerc file {edgerc_file}')
         exit(1)
 
     if not section:
@@ -89,19 +89,15 @@ def init_config(edgerc_file, section):
     try:
         edgerc = EdgeRc(edgerc_file)
         base_url = edgerc.get(section, 'host')
-
         session = requests.Session()
         session.auth = EdgeGridAuth.from_edgerc(edgerc, section)
-
-        return base_url, session
     except configparser.NoSectionError:
-        root_logger.error("ERROR: edgerc section \"%s\" not found" % section)
+        root_logger.error(f'ERROR: edgerc section {section} not found')
         exit(1)
     except Exception:
-        root_logger.info(
-            'ERROR: Unknown error occurred trying to read edgerc file (%s)' %
-            edgerc_file)
+        root_logger.error(f'ERROR: Unknown error occurred trying to read edgerc file ({edgerc_file})')
         exit(1)
+    return base_url, session
 
 
 class Config:
@@ -178,6 +174,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
     base_url, session = init_config(config.edgerc, config.section)
 
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
     cloudlet_type = cloudlet_type
     name_contains = name_contains
@@ -196,6 +193,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
     root_logger.info('...fetching policy list')
 
     policies_response = cloudlet_object.list_policies(session)
+    policy_df = pd.DataFrame()
     if policies_response.status_code == 200:
         policies_data = policies_response.json()
         policy_df = pd.DataFrame(policies_data)
@@ -207,17 +205,19 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
     shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name', 'cloudletType': 'Type', 'groupId': 'Group ID'}, inplace=True)
     shared_df['Shared Policy'] = '* shared'
 
-    df = pd.concat([policy_df, shared_df], ignore_index=True)
-    df.fillna('', inplace=True)
-    df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy']]
-    df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
-    df.reset_index(drop=True, inplace=True)
+    df = pd.DataFrame()
+    if not policy_df.empty and not shared_df.empty:
+        df = pd.concat([policy_df, shared_df], ignore_index=True)
+        df.fillna('', inplace=True)
+        df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy']]
+        df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
+        df.reset_index(drop=True, inplace=True)
 
-    if name_contains:  # check whether user passed a filter
+    if name_contains and not df.empty:  # check whether user passed a filter
         df = df[df['Policy Name'].str.contains(name_contains, case=False)]
         df.reset_index(drop=True, inplace=True)
 
-    if cloudlet_type:  # only searching by cloudlet type
+    if cloudlet_type and not df.empty:  # only searching by cloudlet type
         df = df[df['Type'] == cloudlet_type.upper()]
         df.reset_index(drop=True, inplace=True)
 
@@ -256,6 +256,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
     policy_name = policy
@@ -463,6 +464,7 @@ def status(config, policy_id, policy):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
     type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
@@ -527,6 +529,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
     cloudlet_type = cloudlet_type.upper()
     utility_object.check_group_input(root_logger, group_name=group_name, group_id=group_id)
@@ -710,6 +713,7 @@ def clone(config, version, policy_id, group_id, new_policy):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     if not version:
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id)
     else:
@@ -737,6 +741,7 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
 
@@ -809,6 +814,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
     if network == 'production':
         network = 'prod'
@@ -878,6 +884,7 @@ def activation_status(config, policy_id, network):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     status_code, response = cloudlet_object.list_policy_activation(session, policy_id)
     df = pd.DataFrame()
     if status_code == 200:
@@ -945,6 +952,7 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
     df, response = cloudlet_object.get_schema(session, cloudlet_type, template)
     if optjson:
         print_json(data=response.json())

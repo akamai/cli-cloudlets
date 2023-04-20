@@ -28,6 +28,17 @@ class Cloudlet:
         else:
             self.account_switch_key = ''
 
+    def get_account_name(self, session, account_id: str | None = None) -> None:
+        if account_id:
+            account_id = account_id.split(':')
+            url = f'https://{self.access_hostname}/identity-management/v3/api-clients/self/account-switch-keys?search={account_id[0]}'
+            resp = session.get(url)
+            try:
+                account_name = resp.json()[0]['accountName']
+                print(f'\nAccount Name: {account_name} {account_id}')
+            except:
+                print(f'\nInvalid account key: {account_id}')
+
     def get_groups(self, session):
         cloudlet_group_url = f'https://{self.access_hostname}/cloudlets/api/v2/group-info'
         cloudlet_group_response = session.get(self.form_url(cloudlet_group_url))
@@ -301,9 +312,12 @@ class Cloudlet:
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
         response = session.get(self.form_url(url), headers=headers)
-        df = pd.DataFrame(response.json())
-        if not df.empty:
-            df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
+        if response.status_code == 200:
+            df = pd.DataFrame(response.json())
+            if not df.empty:
+                df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
+            else:
+                return pd.DataFrame(), response
         else:
             return pd.DataFrame(), response
 
