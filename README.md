@@ -34,12 +34,14 @@ Here is a summary of the current functionality:
 
 - Display available cloudlet types based on account
 - List all cloudlet policies (search by name and/or cloudlet-type)
-- Retrieve cloudlet policy version rules
-- Update policy version rules
-- Activate policy version to staging or production network
-- Create a cloudlet policy
-- Clone a cloudlet policy (from an existing one)
 - Get policy endpoints schema
+- Retrieve cloudlet policy version rules
+- Get status of cloudlet policy version on each network and associated property manager
+- Update policy version rules
+- Clone a cloudlet policy (from an existing one)
+- Create a cloudlet policy
+- Activate policy version to staging or production network
+- View activation history of the policy version to staging or production network
 
 ## Cloudlet Types
 
@@ -65,7 +67,7 @@ Main program file that wraps this functionality in a command line utility:
 
 - [cloudlets](#cloudlets)
 - [list](#list)
-- [policy-endpoint](#polcy-endpoint)
+- [policy-endpoint](#policy-endpoint)
 - [retrieve](#retrieve)
 - [status](#status)
 - [update](#update)
