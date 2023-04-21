@@ -293,18 +293,12 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=payload, headers=headers)
         return response
 
-    def update_shared_policy_detail(self, session, policy_id: int, version: int, match_rules: list, notes: str | None = None):
+    def update_shared_policy_detail(self, session, policy_id: int, version: int, match_rules: dict):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions/{version}'
         headers = {'accept': 'application/json',
                    'content-type': 'application/json'
                   }
-        if notes is None:
-            notes = 'CLI cloudlet update'
-        payload = {'configuration': {'originNewVisitorLimit': 1000},
-                   'description': notes,
-                   'matchRules': match_rules,
-                  }
-        response = session.put(self.form_url(url), json=payload, headers=headers)
+        response = session.put(self.form_url(url), json=match_rules, headers=headers)
         return response
 
     def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> pd.DataFrame:
@@ -341,37 +335,39 @@ class Cloudlet:
             spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
             dft = spec_df.T
 
-            print('\n\n\nFields information')
+            print('\n\nFields information')
             properties = dft['properties'].values.tolist()
             properties_df = pd.DataFrame(properties)
             properties_df.fillna('', inplace=True)
             print(tabulate(properties_df, headers='keys', showindex=True, tablefmt='psql'))
 
             try:
-                print('\n\n\nmatchRuleType')
                 matchRuleType = response.json()['definitions']['matchRuleType']['properties']
                 matchrule_df = pd.DataFrame(matchRuleType)
                 matchrule_df.fillna('', inplace=True)
-                columns_1 = ['type', 'name', 'matchURL', 'matchesAlways', 'redirectURL', 'statusCode', 'useIncomingQueryString', 'useIncomingSchemeAndHost']
-                print(tabulate(matchrule_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
-
-                columns_2 = ['matches', 'useRelativeUrl']
-                print(tabulate(matchrule_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
+                if not matchrule_df.empty:
+                    print('\n\nmatchRuleType')
+                    columns_1 = matchrule_df.columns.values[0:6]
+                    print(tabulate(matchrule_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
+                    columns_2 = matchrule_df.columns.values[6:]
+                    print(tabulate(matchrule_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
             except:
                 print('no matchRuleType')
 
             try:
-                print('\n\n\nmatchCriteriaType')
                 matchCriteriaType = response.json()['definitions']['matchCriteriaType']['properties']
                 criteria_df = pd.DataFrame(matchCriteriaType)
                 criteria_df.fillna('', inplace=True)
-                columns_1 = ['caseSensitive', 'matchValue', 'negate', 'matchOperator', 'checkIPs', 'objectMatchValue']
-                print(tabulate(criteria_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
+                if not criteria_df.empty:
+                    print('\n\nmatchCriteriaType')
+                    columns_1 = criteria_df.columns.values[0:5]
+                    print(tabulate(criteria_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
 
-                columns_2 = ['matchType']
-                print(tabulate(criteria_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
+                    columns_2 = criteria_df.columns.values[5:]
+                    print(tabulate(criteria_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
             except:
                 print('no matchCriteriaType')
+
         return df, response
 
     def available_shared_policies(self, session) -> pd.DataFrame:
