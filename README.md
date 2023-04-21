@@ -11,7 +11,6 @@ Provides a way to interact with the Akamai Cloudlets via Open APIs. Provides var
 ## Requirements
 
 - Python 3+
-- pip install edgegrid-python
 
 ## Prerequisites - Setup API Credentials
 
@@ -33,7 +32,7 @@ client_token = [CLIENT_TOKEN_HERE]
 
 Here is a summary of the current functionality:
 
-- List available cloudlet types based on account
+- Display available cloudlet types based on account
 - List all cloudlet policies (search by name and/or cloudlet-type)
 - Retrieve cloudlet policy version rules
 - Update policy version rules
@@ -44,7 +43,7 @@ Here is a summary of the current functionality:
 
 ## Cloudlet Types
 
-Here is the list of cloudlets and cloudlet type codes. Please reference appropriate cloudlet type code in _[list](#list)_ or _[create-policy](#create-policy)_ commands
+Here is the list of cloudlets and cloudlet type codes. Please reference appropriate cloudlet type code in _[cloudlets](#cloudlets)_, _[list](#list)_, or _[create-policy](#create-policy)_ commands
 
 | name                      | code | policy    |
 | ------------------------- | ---- | --------- |
@@ -64,16 +63,16 @@ Here is the list of cloudlets and cloudlet type codes. Please reference appropri
 
 Main program file that wraps this functionality in a command line utility:
 
+- [cloudlets](#cloudlets)
 - [list](#list)
+- [policy-endpoint](#polcy-endpoint)
 - [retrieve](#retrieve)
-- [update](#update)
-- [activate](#activate)
-- [create-policy](#create-policy)
-- [clone](#clone)
 - [status](#status)
-- cloudlets TBD
-- activation-status TBD
-- policy-endpoint TBD
+- [update](#update)
+- [clone](#clone)
+- [create-policy](#create-policy)
+- [activate](#activate)
+- [activation-status](#activation-status)
 
 ## Global Flags
 
@@ -84,6 +83,14 @@ Main program file that wraps this functionality in a command line utility:
 
 ```bash
 %  akamai cloudlets --section section_name list
+```
+
+### cloudlets
+
+Display cloudlet policy types available for the account. Display name, code, and policy type
+
+```xml
+%  akamai cloudlets cloudlets
 ```
 
 ### list
@@ -101,12 +108,40 @@ Output can be piped to json or csv format (optional)
 %  akamai cloudlets list --csv > sample.csv
 ```
 
+Argument Details:
+
+```xml
+  --json            Output the policy details in json format
+  --csv             Output the policy details in csv format
+  --cloudlet-type   Abbreviation code for cloudlet type
+  --name-contains   String to use for searching for policies by name
+```
+
+### policy-endpoint
+
+Provide API specification for each cloudlet type.
+
+```xml
+%  akamai cloudlets policy-endpoint --cloudlet-type VP
+%  akamai cloudlets policy-endpoint --cloudlet-type VP --template update-policy
+%  akamai cloudlets policy-endpoint --cloudlet-type VP --template create-nimbus_policy_version-VP-1.0 --json
+```
+
+Argument Details:
+
+```xml
+  --cloudlet-type   cloudlet type  [required]
+  --json            Output the policy details in json format
+  --template        ie. update-policy, create-policy, update-nimbus_policy_version-ALB-1.0
+```
+
 ### retrieve
 
-Retrieves policy version. Please specify either --policy or --policy-id
-By default, policy will be saved to file `policy.json`
-With argument `--only-match-rules`, information will be displayed in table and saved as `policy_matchrules.xlsx`
-If json format is preferred, you can `--json` argument
+Retrieves policy version.
+
+- By default, policy will be saved to file `policy.json`
+- With argument `--only-match-rules` information will be displayed in table and saved to file `policy_matchrules.xlsx`
+- If json format is preferred, you can provide `--json` argument
 
 ```xml
 %  akamai cloudlets retrieve --policy-id 12345
@@ -114,37 +149,104 @@ If json format is preferred, you can `--json` argument
 %  akamai cloudlets retrieve --policy-id 12345 --version 7
 %  akamai cloudlets retrieve --policy-id 12345 --only-match-rules
 %  akamai cloudlets retrieve --policy-id 12345 --only-match-rules --json
+%  akamai cloudlets retrieve --policy-id 12345 --only-match-rules --show
 ```
 
 Argument Details:
 
 ```xml
---version            Policy version number  (If not specified, CLI will show the latest version, if exists)
---policy             Policy name
---policy-id          Policy id
---only-match-rules   Only return the rules section object  (Optional)
---json               Output the policy details in json format
---show               Automatically launch Microsoft Excel after (Mac OS Only)
+  --policy            Policy Name (please specify either --policy-id or --policy)
+  --policy-id         Policy Id (please specify either --policy-id or --policy)
+  --version           Policy version number  (If not specified, CLI will show the latest version, if exists)
+  --only-match-rules  Only return the rules section object  (Optional)
+  --json              Output the policy details in json format
+  --show              Automatically launch Microsoft Excel after (Mac OS Only)
+```
+
+### status
+
+Shows current status of policy. Displays which version is active on staging and production and associated property manager configurations.
+
+```xml
+%  akamai cloudlets status --policy sample_name
+%  akamai cloudlets status --policy-id 12345
+```
+
+Argument Details:
+
+```xml
+  --policy      Policy Name (please specify either --policy-id or --policy)
+  --policy-id   Policy Id (please specify either --policy-id or --policy)
 ```
 
 ### update
 
-Update a specific policy with json rules. Please specify either --policy or --policy-id. Specify a version number otherwise a new policy version will be created and its new version number will be returned.
+Update a specific policy with json rules. Please specify either `--policy` or `--policy-id`. Specify a version number otherwise a new policy version will be created and its new version number will be returned.
+See [policy-endpoint](#polcy-endpoint) for correct json upload file
 
 ```xml
 %  akamai cloudlets update --policy sample_name --file rules.json
 %  akamai cloudlets update --policy-id 12345 --file rules.json
 %  akamai cloudlets update --policy sample_name --file rules.json --notes "sample notes about the change"
+%  akamai cloudlets update --policy-id 162485 --share --version 2 --file policy.json
+%  akamai cloudlets update --policy-id 162485 --share --group-id 47580 --notes "sample note #2"
 ```
 
 Argument Details:
 
 ```xml
---policy                     Cloudlet policy name
---policy-id                  Cloudlet policy id
---file                       File that contains cloudlet policy rules (json format)
---notes                      Notes to be associated to the policy version (Optional: if not specified will use value in rules json file)
---version                    Policy version to be updated (Optional: if not specified, a new policy version will be created with specified rules)
+  --group-id    Group ID without ctr_ prefix
+  --policy      Policy Name
+  --policy-id   Policy Id
+  --notes       Policy version notes
+  --version     Policy version to update, otherwise creates new version
+  --file        JSON file with policy data
+  --share       Shared policy.  This flag is required if you update a share policy
+```
+
+### clone
+
+Clone policy from an existing policy using API v3
+
+```xml
+%  akamai cloudlets clone --policy-id 67890 --new-policy newname --group-id 12345
+%  akamai cloudlets clone --policy-id 67890 --new-policy newname --group-id 12345 --version 5
+%  akamai cloudlets clone --policy-id 67890 --new-policy newname --group-id 12345 --version [1,13,14,15]
+```
+
+Argument Details:
+
+```xml
+  --policy-id    Policy Id  [required]
+  --new-policy   New Policy Name  [required]
+  --group-id     Group ID of new policy  [required]
+  --version      Policy version numbers to be cloned from i.e. [1] or [1,2,3]
+```
+
+### create-policy
+
+Creates a new cloudlet policy
+See [cloudlets](#cloudlets) for correct cloudlet types
+
+```xml
+%  akamai cloudlets create-policy --policy sample_name --group-id 12345 --cloudlet-type ER
+%  akamai cloudlets create-policy --policy sample_name --group-id 12345 --cloudlet-type ER --share
+%  akamai cloudlets create-policy --policy sample_name --group-name existinggroupname --cloudlet-type AS
+%  akamai cloudlets create-policy --policy sample_name --group-id 12345 --cloudlet-type ER --notes "sample create notes"
+```
+
+Argument Details:
+
+```xml
+  --policy          Policy Name  [required]
+  --cloudlet-type   Abbreviation code for cloudlet type  [required]
+                    one of ALB, AP, AS, CD, ER, FR, IG, IV, MMA, MMB, VP
+  --group-id        Existing group id without grp_ prefix to be associated with cloudlet policy
+                    (please specify either --group-id or --group-name)
+  --group-name      Existing group name to be associated with cloudlet policy
+                    (please specify either --group-id or --group-name)
+  --share           Shared policy [optional]
+  --notes           Policy Notes [optional]
 ```
 
 ### activate
@@ -161,70 +263,28 @@ Activate a cloudlet policy version to Akamai staging or production network.
 Argument Details:
 
 ```xml
---policy                     Cloudlet policy name
---policy-id                  Cloudlet policy id
---network                    Either *staging* or *prod*
---version                    Cloudlet policy version to be activated (Optional: if not specified, latest version will be activated)
---add-properties             Comma separated list of property manager configuration names (Optional: configurations will be associated to the policy which is necessary for first time activation
+  --policy           Policy Name
+  --policy-id        Policy Id
+  --version          Policy version to be activated (Optional: if not specified, latest version will be activated)
+  --network          Akamai network (**staging** or **prod**)  [required]
+  --add-properties   Property names to be associated to cloudlet policy (comma separated).
+                     (Optional: configurations will be associated to the policy which is necessary for first time activation)
 ```
 
-### create-policy
+### activation-status
 
-Creates a new cloudlet policy
-
-```xml
-%  akamai cloudlets create-policy --policy sample_name --group-id 12345 --cloudlet-type ER
-%  akamai cloudlets create-policy --policy sample_name --group-name existinggroupname --cloudlet-type AS
-%  akamai cloudlets create-policy --policy sample_name --group-id 12345 --cloudlet-type ER --notes "sample create notes"
-```
-
-Argument Details:
+Show activation history status of the policy id on each network, if specified
 
 ```xml
---policy                      Cloudlet policy name
---group-id                    Existing group id to be associated with cloudlet policy (please specify either --group-id or --group-name)
---group-name                  Existing group name to be associated with cloudlet policy (please specify either --group-id or --group-name)
---cloudlet-type               Cloudlet type (One of ER, VP, FR, IG, AP, AS, CD, IV, ALB)
---notes                       Notes for cloudlet policy (Optional)
-```
-
-### clone
-
-Create a new cloudlet policy by cloning from an existing one.
-
-```xml
-%  akamai cloudlets clone --policy-id 67890 --new-policy newname --new-group-id 12345
-%  akamai cloudlets clone --policy existingpolicyname --new-policy newname --new-group-name groupname
-%  akamai cloudlets clone --policy-id 67890 --version 5 --new-policy newname
-%  akamai cloudlets clone --policy existingpolicyname --version 5 --new-policy newname --notes "sample notes"
+%  akamai cloudlets activation-status --policy-id 162485
+%  akamai cloudlets activation-status --policy-id 162485 --network staging
 ```
 
 Argument Details:
 
 ```xml
---policy                     Cloudlet policy name cloning from (please specify either --policy or --policy-id)
---policy-id                  Cloudlet policy id cloning from (please specify either --policy or --policy-id)
---version                    Version of existing cloudlet policy (Optional: if not specified, will use the latest)
---new-policy                 Name of new cloudlet policy
---new-group-id               Existing group id to be associated with new cloudlet policy (Optional: will use same group if not specified)
---new-group-name             Existing group name to be associated with cloudlet policy (Optional: will use same group if not specified)
---notes                      Policy notes for new cloudlet policy (Optional)
-```
-
-### status
-
-Shows current status of policy. Please specify either --policy or --policy-id. Displays which version is active on staging and production and associated property manager configurations.
-
-```xml
-%  akamai cloudlets status --policy sample_name
-%  akamai cloudlets status --policy-id 12345
-```
-
-Argument Details:
-
-```xml
---policy                     Cloudlet policy name
---policy-id                  Cloudlet policy id
+  --policy-id   Policy Id  [required]
+  --network     Akamai network (staging or production)
 ```
 
 # Contribution

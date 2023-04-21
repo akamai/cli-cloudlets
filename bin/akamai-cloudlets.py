@@ -127,7 +127,7 @@ def cli(config, edgerc, section, account_key):
 @pass_config
 def cloudlets(config):
     """
-    List available cloudlets
+    List available cloudlets policy name/code/type for the contract
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -169,7 +169,7 @@ def cloudlets(config):
 @pass_config
 def list(config, optjson, optcsv, cloudlet_type, name_contains):
     '''
-    List policies
+    List all cloudlet policies. Result is sorted by policy name
     '''
     base_url, session = init_config(config.edgerc, config.section)
 
@@ -239,16 +239,16 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
 
 
 @cli.command(short_help='Retrieve policy detail version')
+@click.option('--policy', metavar='', help='Policy Name (please specify either --policy-id or --policy)', required=False)
+@click.option('--policy-id', metavar='', type=int, help='Policy Id (please specify either --policy-id or --policy)', required=False)
 @click.option('--version', metavar='',
               help='Policy version number  (If not specified, CLI will show the latest version, if exists)',
               required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--policy-id', metavar='', type=int, help='Policy Id', required=False)
-@click.option('--only-match-rules', metavar='', help='Only return the rules section object  (Optional)', is_flag=True, default=False, required=False)
+@click.option('--only-match-rules', metavar='', help='Only return the rules section object  [Optional]', is_flag=True, default=False, required=False)
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @click.option('--show', is_flag=True, default=False,
               help='Automatically launch Microsoft Excel after (Mac OS Only)',
               required=False)
-@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
 @pass_config
 def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show):
     """
@@ -455,8 +455,8 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
 
 
 @cli.command(short_help='Show policy status with property manager version, if any')
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
-@click.option('--policy', metavar='', help='Policy Name', required=False)
+@click.option('--policy', metavar='', help='Policy Name (please specify either --policy-id or --policy)', required=False)
+@click.option('--policy-id', metavar='', type=int, help='Policy Id (please specify either --policy-id or --policy)', required=False)
 @pass_config
 def status(config, policy_id, policy):
     """
@@ -515,12 +515,13 @@ def status(config, policy_id, policy):
 
 
 @cli.command(short_help='Create a new policy')
-@click.option('--group-id', metavar='', type=int, help='Group ID without grp_ prefix', required=False)
-@click.option('--group-name', metavar='', help='Group Name', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=True)
-@click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=True)
-@click.option('--share', help='Shared policy', is_flag=True, default=False)
-@click.option('--notes', metavar='', help='Policy Notes', required=False)
+@click.option('--cloudlet-type', metavar='', type=click.Choice(['ALB', 'AP', 'AS', 'CD', 'ER', 'FR', 'IG', 'IV', 'MMA', 'MMB', 'VP'], case_sensitive=False),
+              help='Abbreviation code for cloudlet type', required=True)
+@click.option('--group-id', metavar='', type=int, help='Existing group id without grp_ prefix to be associated with cloudlet policy (please specify either --group-id or --group-name)', required=False)
+@click.option('--group-name', metavar='', help='Existing group name to be associated with cloudlet policy (please specify either --group-id or --group-name)', required=False)
+@click.option('--share', help='Shared policy [optional]', is_flag=True, default=False)
+@click.option('--notes', metavar='', help='Policy Notes [optional]', required=False)
 @pass_config
 def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
                   notes: str | None = None):
@@ -703,9 +704,9 @@ def clone_api_v2(config, version, policy_id, policy, notes, new_group_name, new_
 
 @cli.command(short_help='Clone policy from an existing policy using API v3')
 @click.option('--policy-id', metavar='', type=int, help='Policy Id', required=True)
-@click.option('--version', metavar='', cls=PythonLiteralOption, help='Policy version numbers to be cloned from i.e. [1] or [1,2,3]', default=[], required=False)
-@click.option('--group-id', metavar='', type=int, help='Group ID of new policy', required=True)
 @click.option('--new-policy', metavar='', help='New Policy Name', required=True)
+@click.option('--group-id', metavar='', type=int, help='Group ID of new policy', required=True)
+@click.option('--version', metavar='', cls=PythonLiteralOption, help='Policy version numbers to be cloned from i.e. [1] or [1,2,3]', default=[], required=False)
 @pass_config
 def clone(config, version, policy_id, group_id, new_policy):
     """
@@ -753,11 +754,12 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
     if file:
         with open(file) as f:
             update_json_content = json.loads(f.read())
+
     if share:
+
         if version:
             update_response = cloudlet_object.update_shared_policy_detail(session, policy_id, version,
-                                                                          match_rules=update_json_content,
-                                                                          notes=notes)
+                                                                          match_rules=update_json_content)
             if update_response.status_code == 409:
                 root_logger.info(f"{update_response.json()['errors'][0]['detail']}")
             elif update_response.status_code == 200:
@@ -773,9 +775,9 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
             update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
             if update_response.status_code == 400:
                 print_json(data=update_response.json())
-                root_logger.info(f'Not able to update policy {policy_name}')
+                root_logger.info(f'Not able to update Policy Notes for policy {policy_name}')
             else:
-                root_logger.info(f'Updating policy {policy_name}')
+                root_logger.info(f'Updating Policy Notes for policy {policy_name}')
     else:
 
         update_json_content = {'description': notes} if notes else {'description': 'update by cloudlets cli'}
@@ -801,12 +803,13 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
 
 
 @cli.command(short_help='Activate a policy version')
-@click.option('--policy-id', metavar='', help='Policy Id', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
-@click.option('--version', metavar='', help='Policy version', required=False)
-@click.option('--add-properties', metavar='', help='Property names to be associated to cloudlet policy (comma separated).', required=False)
+@click.option('--policy-id', metavar='', help='Policy Id', required=False)
+@click.option('--version', metavar='', help='Policy version to be activated (Optional: if not specified, latest version will be activated)', required=False)
 @click.option('--network', metavar='', type=click.Choice(['staging', 'production'], case_sensitive=False),
               help='Akamai network (staging or prod)', required=True)
+@click.option('--add-properties', metavar='', required=False,
+              help='Property names to be associated to cloudlet policy (comma separated). (Optional: configurations will be associated to the policy which is necessary for first time activation)')
 @pass_config
 def activate(config, policy_id, policy, version, add_properties, network):
     """
@@ -855,7 +858,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
         response = cloudlet_object.activate_shared_policy(session, policy_id=policy_id, version=version, network=network)
         activation_response = response.json()
         activation_response_status_code = response.status_code
-        root_logger.info(f'{activation_response_status_code} {network} {policy_name} {policy_id}')
+        root_logger.info(f'Activating policy {policy_name}')
         if activation_response_status_code != 202:
             root_logger.info(f'{activation_response["errorMessage"]}')
             exit(-1)
@@ -942,18 +945,18 @@ def activation_status(config, policy_id, network):
 
 
 @cli.command(short_help='Cloudlet policies API endpoints specification')
+@click.option('--cloudlet-type', metavar='', help='cloudlet type', required=True)
 @click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
-@click.option('--cloudlet-type', metavar='', help='cloudlet type', required=False)
 @click.option('--template', metavar='', help='ie. update-policy, create-policy, update-nimbus_policy_version-ALB-1.0', required=False)
 @pass_config
 def policy_endpoint(config, cloudlet_type, template, optjson):
     """
-    Cloudlet policies API endpoints specification
+    Cloudlet policies API endpoints specification.  For template, add --template without .json extension
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    df, response = cloudlet_object.get_schema(session, cloudlet_type, template)
+    _, response = cloudlet_object.get_schema(session, cloudlet_type, template)
     if optjson:
         print_json(data=response.json())
 
