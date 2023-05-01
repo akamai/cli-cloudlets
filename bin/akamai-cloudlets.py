@@ -842,7 +842,6 @@ def activate(config, policy_id, policy, version, add_properties, network):
 
     start_time = time.perf_counter()
     if type == ' ':
-        root_logger.info(f'x {version} {network} {policy_name} {policy_id}')
         response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
                                                            version=version, network=network,
                                                            additionalPropertyNames=additionalPropertyNames)

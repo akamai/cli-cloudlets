@@ -288,7 +288,7 @@ class Utility:
                             end_time = time.perf_counter()
                 time.sleep(30)
                 live.update(self.activation_table(response))
-                print('Polling every 30 seconds...')
+                print('Polling 30s...')
 
             return end_time
 
