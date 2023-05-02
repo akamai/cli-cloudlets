@@ -819,9 +819,6 @@ def activate(config, policy_id, policy, version, add_properties, network):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
-    if network == 'production':
-        network = 'prod'
-
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
     type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
                                                                                          cloudlet_object,
@@ -839,9 +836,10 @@ def activate(config, policy_id, policy, version, add_properties, network):
         version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
         if not version:
             _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
-
     start_time = time.perf_counter()
     if type == ' ':
+        if network == 'production':
+            network = 'prod'
         response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
                                                            version=version, network=network,
                                                            additionalPropertyNames=additionalPropertyNames)
@@ -859,7 +857,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
         activation_response_status_code = response.status_code
         root_logger.info(f'Activating policy {policy_name}')
         if activation_response_status_code != 202:
-            root_logger.info(f'{activation_response["errorMessage"]}')
+            root_logger.info(f'{activation_response["errors"]}')
             exit(-1)
 
     try:
