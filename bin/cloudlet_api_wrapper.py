@@ -408,10 +408,11 @@ class Cloudlet:
         """Function to fetch activation details of policy"""
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/activations'
         if network:
-            url = f'{url}/?network={network}&offset=0&pageSize=100'
+            if network == 'production':
+                network = 'prod'
+                url = f'{url}?network={network}&offset=0&pageSize=100'
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
-        # print(f'{response.status_code}\n{response.url}\n{response.text}')
         return response.status_code, response.json()
 
     def list_shared_policy_activation(self, session, policy_id: int, activation_id: int):

@@ -887,7 +887,7 @@ def activation_status(config, policy_id, network):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    status_code, response = cloudlet_object.list_policy_activation(session, policy_id)
+    status_code, response = cloudlet_object.list_policy_activation(session, policy_id, network)
     df = pd.DataFrame()
     if status_code == 200:
         if len(response) == 0:
