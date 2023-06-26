@@ -771,6 +771,8 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
     if file:
         with open(file) as f:
             update_json_content = json.loads(f.read())
+    else:
+        update_json_content = {}
 
     if share:
         if notes:
