@@ -188,7 +188,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
             exit(-1)
         else:
             utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
-            cloudlet_object.get_schema(session)
+            cloudlet_object.get_schema(session, cloudlet_type.upper())
 
     root_logger.info('...fetching policy list')
 
@@ -308,6 +308,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
     with open(json_file, 'w') as f:
         json.dump(response.json(), f, indent=4)
     root_logger.info(f'Full policy json is saved at {json_file}')
+    print('\n\n')
 
     if only_match_rules:
         matchRules = []
@@ -357,6 +358,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
 
                 # temp_df.fillna('', inplace=True)
                 type, columns, match_types = utility_object.proces_matchrules_column(original_df)
+                root_logger.info(f'{type=}')
                 print()
                 root_logger.info('match rules')
 
@@ -364,11 +366,10 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                     # --policy-id 163451
                     sheet1 = original_df[columns]
                     sheet2 = pd.DataFrame()
-                    print()
                     root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
                 else:
                     new_df = original_df
-                    new_df.fillna('', inplace=True)
+                    new_df = new_df.fillna('')
 
                     if len(match_types) == 1 and match_types[0] == 'matchValue':
                         # --policy-id 183946, 149103
@@ -392,20 +393,37 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                         matched_columns = ['name', 'match no.'] + subtracted
 
                         member = original_df['length'].unique().tolist()
-                        if len(member) == 1 and member[0] == 1:
-                            combine_df = pd.concat([original_df[columns], matches_df[subtracted]], axis=1)
-                            sheet1 = combine_df
-                            sheet2 = pd.DataFrame()
-                            print()
-                            root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                        x = matches_df.columns.values.tolist()
+                        x.remove('name')
+                        x.remove('match no.')
 
+                        if len(member) == 1 and member[0] == 1:
+                            matched_columns = x
+                            combine_df = pd.concat([original_df[columns], matches_df[matched_columns]], axis=1)
+                            sheet1 = combine_df
+                            sheet1 = sheet1.fillna('')
+                            root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                            sheet2 = pd.DataFrame()
                         else:
                             sheet1 = original_df[columns]
-                            sheet2 = matches_df[matched_columns]
                             root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+
                             print()
                             root_logger.info('matches')
-                            root_logger.info(tabulate(sheet2, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                            matched_columns = ['name', 'match no.'] + x
+                            sheet2 = matches_df[matched_columns]
+                            sheet2 = sheet2.fillna('')
+
+                            if len(matched_columns) > 7:
+                                if len(matched_columns) - 7 > 2:
+                                    column_1 = matched_columns[:7]
+                                    print(tabulate(sheet2[column_1], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=40))
+                                    column_2 = matched_columns[7:]
+                                    print(tabulate(sheet2[column_2], headers='keys', showindex=True, tablefmt='psql'))
+                                else:
+                                    print(tabulate(sheet2[matched_columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=20))
+                            else:
+                                root_logger.info(tabulate(sheet2[matched_columns], headers='keys', tablefmt='psql', showindex=True, numalign='center', maxcolwidths=40))
 
                     if len(match_types) == 2:
                         # --policy-id 161133, 185769, 163388,  163454
@@ -434,10 +452,11 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                         matched_columns = ['name', 'match no.'] + subtracted
                         combine_df = pd.merge(left=original_df[columns], right=matches_df[matched_columns], on='name')
                         sheet1 = original_df[columns]
-                        sheet2 = matches_df[matched_columns]
-                        root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
+                        root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center', maxcolwidths=40))
+
                         print()
                         root_logger.info('matches')
+                        sheet2 = matches_df[matched_columns]
                         root_logger.info(tabulate(sheet2, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
 
                 filename = 'policy_matchrules.xlsx'
