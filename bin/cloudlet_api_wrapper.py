@@ -257,6 +257,7 @@ class Cloudlet:
     def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version='optional'):
         """Function to create a policy version"""
         headers = {'Content-Type': 'application/json'}
+        print_json(data)
         if clone_version == 'optional':
             url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true'
         else:
@@ -301,74 +302,64 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=match_rules, headers=headers)
         return response
 
-    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> pd.DataFrame:
+    def get_schema(self, session, cloudlet_type: str, template: str | None = None) -> pd.DataFrame:
         headers = {'accept': 'application/json'}
 
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
         response = session.get(self.form_url(url), headers=headers)
-        if response.status_code == 200:
-            df = pd.DataFrame(response.json())
-            if not df.empty:
-                df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
-            else:
-                return pd.DataFrame(), response
-        else:
-            return pd.DataFrame(), response
+        schemas_df = pd.DataFrame(response.json()['schemas'])
+        schemas_df.rename(columns={'location': 'endpoint'}, inplace=True)
 
-        if cloudlet_type:
-            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
-            response = session.get(self.form_url(url), headers=headers)
-            schemas_df = pd.DataFrame(response.json()['schemas'])
-            schemas_df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
-            df = df[df['code'] == cloudlet_type]
-
-        columns = ['name', 'code']
-        if cloudlet_type:
-            if not schemas_df.empty:
-                columns = ['action', 'endpoint']
-                print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
+        if not schemas_df.empty:
+            columns = ['title', 'endpoint']
+            print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
 
         if template:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
             response = session.get(self.form_url(url), headers=headers)
 
-            spec_df = pd.DataFrame.from_dict(response.json(), orient='index')
-            dft = spec_df.T
+            # print_json(data= response.json())
+            if 'properties' in response.json().keys():
+                print('\n\nFields information')
+                property = response.json()['properties']
+                property_df = pd.DataFrame(property)
+                property_df.fillna('', inplace=True)
+                columns = property_df.columns.values.tolist()
+                print(tabulate(property_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=30))
 
-            print('\n\nFields information')
-            properties = dft['properties'].values.tolist()
-            properties_df = pd.DataFrame(properties)
-            properties_df.fillna('', inplace=True)
-            print(tabulate(properties_df, headers='keys', showindex=True, tablefmt='psql'))
+            if 'definitions' in response.json().keys():
+                try:
+                    matchRuleType = response.json()['definitions']['matchRuleType']['properties']
+                    matchrule_df = pd.DataFrame(matchRuleType)
+                    matchrule_df.fillna('', inplace=True)
+                    if not matchrule_df.empty:
+                        print('\n\nmatchRuleType')
+                        columns = matchrule_df.columns.values.tolist()
+                        if len(columns) > 7:
+                            if len(columns) - 7 > 4:
+                                column_1 = columns[:7]
+                                print(tabulate(matchrule_df[column_1], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=40))
+                                column_2 = columns[7:]
+                                print(tabulate(matchrule_df[column_2], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=40))
+                            else:
+                                print(tabulate(matchrule_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=20))
+                        else:
+                            print(tabulate(matchrule_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=10))
+                except:
+                    print('no matchRuleType')
 
-            try:
-                matchRuleType = response.json()['definitions']['matchRuleType']['properties']
-                matchrule_df = pd.DataFrame(matchRuleType)
-                matchrule_df.fillna('', inplace=True)
-                if not matchrule_df.empty:
-                    print('\n\nmatchRuleType')
-                    columns_1 = matchrule_df.columns.values[0:6]
-                    print(tabulate(matchrule_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
-                    columns_2 = matchrule_df.columns.values[6:]
-                    print(tabulate(matchrule_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
-            except:
-                print('no matchRuleType')
+                try:
+                    matchCriteriaType = response.json()['definitions']['matchCriteriaType']['properties']
+                    criteria_df = pd.DataFrame(matchCriteriaType)
+                    criteria_df.fillna('', inplace=True)
+                    if not criteria_df.empty:
+                        print('\n\nmatchCriteriaType')
+                        columns = criteria_df.columns.values.tolist()
+                        print(tabulate(criteria_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=30))
+                except:
+                    print('no matchCriteriaType')
 
-            try:
-                matchCriteriaType = response.json()['definitions']['matchCriteriaType']['properties']
-                criteria_df = pd.DataFrame(matchCriteriaType)
-                criteria_df.fillna('', inplace=True)
-                if not criteria_df.empty:
-                    print('\n\nmatchCriteriaType')
-                    columns_1 = criteria_df.columns.values[0:5]
-                    print(tabulate(criteria_df[columns_1], headers='keys', showindex=True, tablefmt='psql'))
-
-                    columns_2 = criteria_df.columns.values[5:]
-                    print(tabulate(criteria_df[columns_2], headers='keys', showindex=True, tablefmt='psql'))
-            except:
-                print('no matchCriteriaType')
-
-        return df, response
+        return schemas_df, response
 
     def available_shared_policies(self, session) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
