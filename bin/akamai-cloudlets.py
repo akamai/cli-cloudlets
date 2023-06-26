@@ -773,6 +773,10 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
             update_json_content = json.loads(f.read())
 
     if share:
+        if notes:
+            update_json_content['description'] = notes
+        else:
+            update_json_content['description'] = 'update by cloudlets cli'
 
         if version:
             update_response = cloudlet_object.update_shared_policy_detail(session, policy_id, version,
@@ -787,17 +791,22 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
         else:
             if not group_id:
                 root_logger.error('without --version, --group_id argument is required')
+                root_logger.error('without --version, only policy note will be updated')
+                exit(-1)
+            if not notes:
+                root_logger.error('without --version, --notes argument is required')
                 exit(-1)
 
             update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
             if update_response.status_code == 400:
-                print_json(data=update_response.json())
                 root_logger.info(f'Not able to update Policy Notes for policy {policy_name}')
             else:
                 root_logger.info(f'Updating Policy Notes for policy {policy_name}')
     else:
-
-        update_json_content = {'description': notes} if notes else {'description': 'update by cloudlets cli'}
+        if notes:
+            update_json_content['description'] = notes
+        else:
+            update_json_content['description'] = 'update by cloudlets cli'
 
         if version:
             # update the provided version
@@ -806,11 +815,11 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
             # create and update a new version
             update_response = cloudlet_object.create_clone_policy_version(session, policy_id, json.dumps(update_json_content))
 
-        if update_response.status_code == 201:
-            version = update_response.json()['version']
-            root_logger.info(f'create and update a new version {version}')
-        elif update_response.status_code == 200:
+        if update_response.status_code == 200:
             root_logger.info(f'Successfully updated policy version {policy_name} v{version}')
+        elif update_response.status_code == 201:
+            version = update_response.json()['version']
+            root_logger.info(f'create a new version {version}')
         else:
             print_json(data=update_response.json())
             root_logger.info('ERROR: Unable to update policy')

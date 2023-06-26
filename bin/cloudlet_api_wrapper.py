@@ -254,11 +254,10 @@ class Cloudlet:
             transposed_df = df.T
         return transposed_df, policy_version_response
 
-    def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version='optional'):
+    def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version: int | None = None):
         """Function to create a policy version"""
         headers = {'Content-Type': 'application/json'}
-        print_json(data)
-        if clone_version == 'optional':
+        if clone_version is None:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true'
         else:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeRules=true&cloneVersion={clone_version}'
