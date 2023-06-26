@@ -296,9 +296,10 @@ By submitting a contribution (the “Contribution”) to this project, and for g
 ## Local Install
 
 - Minimum python 3.6 `git clone https://github.com/akamai/cli-cloudlets.git`
+- cd into cli-cloudlets directory `cd cli-onboard`
 - Create python virtual environment `python3 -m venv .venv`
 - Install required packages `pip3 install -r requirements.txt`
-- If testing another branch run, for example, `git switch shared-policy`
+- If testing another branch run, for example, `git checkout -b shared-policy`
 - Run as Akamai CLI, first uninstall `akamai uninstall cloudlets`
 - Run `pwd` to get current directory i.e `/Users/Documents/cli-onboard`
 - Install from local repo

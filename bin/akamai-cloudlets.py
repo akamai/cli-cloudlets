@@ -973,12 +973,13 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
     _, response = cloudlet_object.get_schema(session, cloudlet_type, template)
     if optjson:
         print_json(data=response.json())
-    print(f"Endpoint:              {response.json()['location']}")
-    print(f"Version:               {response.json()['version']}")
-    print(f"Title:                 {response.json()['title']}")
-    print(f"Description:           {response.json()['description']}")
-    if 'additionalDescription' in response.json().keys():
-        print(f"AdditionalDescription: {response.json()['additionalDescription']}")
+    if template:
+        print(f"Endpoint:              {response.json()['location']}")
+        print(f"Version:               {response.json()['version']}")
+        print(f"Title:                 {response.json()['title']}")
+        print(f"Description:           {response.json()['description']}")
+        if 'additionalDescription' in response.json().keys():
+            print(f"AdditionalDescription: {response.json()['additionalDescription']}")
 
 
 def get_prog_name():
