@@ -316,6 +316,9 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
             df = response.json()['matchRules']
             for every_match_rule in response.json()['matchRules']:
                 # retrieve only matchRules section and strip out location akaRuleId
+                if every_match_rule['type'] == 'igMatchRule':
+                    del every_match_rule['matchURL']
+
                 if 'location' in every_match_rule:
                     del every_match_rule['location']
                 if 'akaRuleId' in every_match_rule:
