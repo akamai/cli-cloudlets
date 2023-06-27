@@ -161,7 +161,8 @@ class Cloudlet:
 
     def create_shared_policy(self, session, name: str, type: str,
                              group_id: int,
-                             notes: str):
+                             matchRules: list | None = None,
+                             notes: str | None = None):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies'
         headers = {'accept': 'application/json',
                    'content-type': 'application/json'}
@@ -176,7 +177,7 @@ class Cloudlet:
         response = session.post(self.form_url(url), json=payload, headers=headers)
         if response.status_code == 201:
             policy_id = response.json()['id']
-            version_response = self.create_shared_policy_version(session, policy_id, type)
+            version_response = self.create_shared_policy_version(session, policy_id, matchRules, notes)
             if version_response.status_code == 201:
                 try:
                     policy_version = version_response.json()['version']
@@ -187,24 +188,14 @@ class Cloudlet:
                 return version_response, policy_id, None
         return response, None, None
 
-    def create_shared_policy_version(self, session, policy_id: int, name: str, notes: str | None = None):
+    def create_shared_policy_version(self, session, policy_id: int, matchRules: list, notes: str | None = None):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
         headers = {'accept': 'application/json',
                    'content-type': 'application/json'}
         if notes is None:
             notes = 'Created by Cloudlet CLI'
-        payload = {'configuration': {'originNewVisitorLimit': 1000},
-                   'description': notes,
-                   'matchRules': [{'type': 'erMatchRule',
-                                    'disabled': False,
-                                    'matchesAlways': True,
-                                    'redirectURL': 'none',
-                                    'statusCode': 307,
-                                    'useIncomingQueryString': True,
-                                    'useIncomingSchemeAndHost': True,
-                                    'useRelativeUrl': 'relative_url'
-                                   }
-                                  ]
+        payload = {'description': notes,
+                   'matchRules': matchRules
                    }
         version_response = session.post(self.form_url(url), json=payload, headers=headers)
         return version_response

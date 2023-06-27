@@ -542,9 +542,9 @@ def status(config, policy_id, policy):
 @click.option('--group-name', metavar='', help='Existing group name to be associated with cloudlet policy (please specify either --group-id or --group-name)', required=False)
 @click.option('--share', help='Shared policy [optional]', is_flag=True, default=False)
 @click.option('--notes', metavar='', help='Policy Notes [optional]', required=False)
+@click.option('--file', metavar='', help='JSON file with policy data', required=False)
 @pass_config
-def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
-                  notes: str | None = None):
+def create_policy(config, group_id, group_name, policy, share, cloudlet_type, file, notes):
     """
     Create a new policy
     """
@@ -588,10 +588,17 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type,
                 exit(-1)
 
     if share:
+        if file:
+            with open(file) as f:
+                match_rules = json.loads(f.read())['matchRules']
+        else:
+            match_rules = []
+
         create_response, _, _ = cloudlet_object.create_shared_policy(session,
                                                                      name=policy,
                                                                      type=cloudlet_type,
                                                                      group_id=group_id,
+                                                                     matchRules=match_rules,
                                                                      notes=notes)
     else:
         policy_data = dict()
@@ -794,19 +801,23 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
                 print_json(data=update_response.json())
                 root_logger.info(f'Not able to update policy {policy_name} v{version}')
         else:
-            if not group_id:
-                root_logger.error('without --version, --group_id argument is required')
-                root_logger.error('without --version, only policy note will be updated')
-                exit(-1)
-            if not notes:
-                root_logger.error('without --version, --notes argument is required')
-                exit(-1)
-
-            update_response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
-            if update_response.status_code == 400:
-                root_logger.info(f'Not able to update Policy Notes for policy {policy_name}')
+            if file is None:
+                if group_id is None:
+                    root_logger.error('--group_id argument is required')
+                    exit(-1)
+                else:
+                    root_logger.info('only policy description will be updated')
+                    response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
+                    if response.status_code == 200:
+                        root_logger.info('policy note is updated')
             else:
-                root_logger.info(f'Updating Policy Notes for policy {policy_name}')
+                matchRules = update_json_content['matchRules']
+                version_response = cloudlet_object.create_shared_policy_version(session, policy_id, matchRules, notes)
+                if version_response.status_code == 201:
+                    version = version_response.json()['version']
+                    root_logger.info(f'create a new version {policy_name} v{version}')
+                else:
+                    root_logger.info('Unable to create a new version')
     else:
         if notes:
             update_json_content['description'] = notes
