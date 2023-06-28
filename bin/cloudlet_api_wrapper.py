@@ -292,17 +292,32 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=match_rules, headers=headers)
         return response
 
-    def get_schema(self, session, cloudlet_type: str, template: str | None = None) -> pd.DataFrame:
+    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> pd.DataFrame:
         headers = {'accept': 'application/json'}
 
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
         response = session.get(self.form_url(url), headers=headers)
-        schemas_df = pd.DataFrame(response.json()['schemas'])
-        schemas_df.rename(columns={'location': 'endpoint'}, inplace=True)
+        if response.status_code == 200:
+            df = pd.DataFrame(response.json())
+            if not df.empty:
+                df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
+            else:
+                return pd.DataFrame(), response
+        else:
+            return pd.DataFrame(), response
 
-        if not schemas_df.empty:
-            columns = ['title', 'endpoint']
-            print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
+        if cloudlet_type:
+            url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
+            response = session.get(self.form_url(url), headers=headers)
+            schemas_df = pd.DataFrame(response.json()['schemas'])
+            schemas_df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
+            df = df[df['code'] == cloudlet_type]
+
+        columns = ['name', 'code']
+        if cloudlet_type:
+            if not schemas_df.empty:
+                columns = ['action', 'endpoint']
+                print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
 
         if template:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
@@ -348,8 +363,7 @@ class Cloudlet:
                         print(tabulate(criteria_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=30))
                 except:
                     print('no matchCriteriaType')
-
-        return schemas_df, response
+        return df, response
 
     def available_shared_policies(self, session) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
