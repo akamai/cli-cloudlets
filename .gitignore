@@ -1,0 +1,10 @@
+*__pycache__*
+.DS_Store
+.venv
+.vscode
+logs
+*.log
+*.xlsx
+*.json
+*.sh
+!cli.json
