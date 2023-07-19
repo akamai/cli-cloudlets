@@ -206,7 +206,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
     shared_df['Shared Policy'] = '* shared'
 
     df = pd.DataFrame()
-    if not policy_df.empty and not shared_df.empty:
+    if not policy_df.empty or not shared_df.empty:
         df = pd.concat([policy_df, shared_df], ignore_index=True)
         df.fillna('', inplace=True)
         df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy']]
