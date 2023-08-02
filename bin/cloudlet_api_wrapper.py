@@ -226,6 +226,12 @@ class Cloudlet:
         cloudlet_policy_versions_response = session.get(self.form_url(url))
         return cloudlet_policy_versions_response
 
+    def list_policy_versions_history(self, session, policy_id: int):
+        """Function to fetch a cloudlet policy versions history"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions?includeActivations=true'
+        cloudlet_policy_versions_response = session.get(self.form_url(url))
+        return cloudlet_policy_versions_response
+
     def get_policy_version(self, session, policy_id, version):
         """Function to fetch a cloudlet policy detail"""
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}/versions/{version}?omitRules=false'
