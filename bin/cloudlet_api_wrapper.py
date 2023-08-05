@@ -94,7 +94,7 @@ class Cloudlet:
             policy_info.append({header: production, 'network': 'production'})
         return name, policy_info, full_policy_detail
 
-    def list_shared_policy_versions(self, session, policy_id: int) -> pd.DataFrame:
+    def list_shared_policy_versions(self, session, policy_id: int) -> tuple:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
         response = session.get(self.form_url(url))
 
@@ -106,7 +106,7 @@ class Cloudlet:
             columns = ['version', 'version notes', 'createdBy', 'modifiedDate', 'lock']
             df.sort_values(by='version', ascending=False, inplace=True)
             version = response.json()['content'][0]['version']
-            return df[columns], version
+            return df[columns], version, response
 
     def get_active_properties(self, session, policy_id) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'

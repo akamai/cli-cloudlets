@@ -318,8 +318,8 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
             df, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
         else:
             # shared latest version policy
-            _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
-            df, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            df, version, response = cloudlet_object.list_shared_policy_versions(session, policy_id)
+            # _, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
 
     if optjson:
         print_json(data=response.json())
@@ -331,9 +331,16 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                 root_logger.info(tabulate(history_df[history_columns], headers=history_columns, maxcolwidths=60,
                                         tablefmt='psql', showindex=False, numalign='center'))
             else:
-                df.rename(columns={'description': 'notes'}, inplace=True)
-                columns = ['policyId', 'version', 'notes', 'modifiedBy', 'modifiedDate']
-                root_logger.info(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                # df.rename(columns={'description': 'notes'}, inplace=True)
+                # columns = ['policyId', 'version', 'notes', 'modifiedBy', 'modifiedDate']
+                # root_logger.info(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                history_df = df.copy()
+                history_columns = ['version', 'lock', 'last modified', 'last editor', 'notes']
+                history_df = history_df.rename(columns={'modifiedDate': 'last modified',
+                                                        'createdBy': 'last editor',
+                                                        'version notes': 'notes'})
+
+                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, tablefmt='psql', showindex=False, numalign='center'))
     # Writing full json
     json_file = 'policy.json'
     with open(json_file, 'w') as f:
@@ -908,7 +915,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     if not version:
         version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
         if not version:
-            _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
+            _, version, _ = cloudlet_object.list_shared_policy_versions(session, policy_id)
     start_time = time.perf_counter()
     if type == ' ':
         if network == 'production':
