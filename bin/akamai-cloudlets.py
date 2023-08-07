@@ -288,10 +288,10 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                 transposed_df['modifiedDate'] = pd.to_datetime(transposed_df['modifiedDate'], unit='ms')
                 df = transposed_df
 
-            response = cloudlet_object.list_policy_versions_history(session, policy_id)
+            history_response = cloudlet_object.list_policy_versions_history(session, policy_id)
 
             # Normalize the JSON data excluding the "activations" field
-            history_df = pd.json_normalize(response.json(),
+            history_df = pd.json_normalize(history_response.json(),
                                    meta=['policyId', 'version', 'description',
                                          'lastModifiedBy', 'lastModifiedDate'])
             history_df = history_df.rename(columns={'description': 'notes',
@@ -318,8 +318,8 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
             df, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
         else:
             # shared latest version policy
-            df, version, response = cloudlet_object.list_shared_policy_versions(session, policy_id)
-            # _, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            df, version, history_response = cloudlet_object.list_shared_policy_versions(session, policy_id)
+            _, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
 
     if optjson:
         print_json(data=response.json())
@@ -341,7 +341,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                                                         'version notes': 'notes'})
 
                 root_logger.info(tabulate(history_df[history_columns], headers=history_columns, tablefmt='psql', showindex=False, numalign='center'))
-    # Writing full json
+    # Writing full json from latest version
     json_file = 'policy.json'
     with open(json_file, 'w') as f:
         json.dump(response.json(), f, indent=4)
