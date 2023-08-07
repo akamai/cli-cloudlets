@@ -287,23 +287,61 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
             if not transposed_df.empty:
                 transposed_df['modifiedDate'] = pd.to_datetime(transposed_df['modifiedDate'], unit='ms')
                 df = transposed_df
+
+            history_response = cloudlet_object.list_policy_versions_history(session, policy_id)
+
+            # Normalize the JSON data excluding the "activations" field
+            history_df = pd.json_normalize(history_response.json(),
+                                   meta=['policyId', 'version', 'description',
+                                         'lastModifiedBy', 'lastModifiedDate'])
+            history_df = history_df.rename(columns={'description': 'notes',
+                                                    'lastModifiedDate': 'last modified',
+                                                    'lastModifiedBy': 'last editor',
+                                                    'activation_staging': 'staging',
+                                                    'activation_production': 'production'})
+
+            # Custom function to extract "status" for "staging" and "production" activations
+            def get_activation_status(activations, version, network):
+                for activation in activations:
+                    if activation['policyInfo']['version'] == int(version) and activation['network'] == network:
+                        return activation['policyInfo'].get('status')
+                return None
+
+            history_df['staging'] = history_df.apply(lambda row: get_activation_status(row['activations'], row['version'], 'staging'), axis=1)
+            history_df['production'] = history_df.apply(lambda row: get_activation_status(row['activations'], row['version'], 'prod'), axis=1)
+            history_df.drop(columns=['activations'], inplace=True)
+            columns = ['version', 'notes', 'last editor', 'last modified', 'staging', 'production']
+            history_df['last modified'] = pd.to_datetime(history_df['last modified'], unit='ms')
+
     else:  # 'Shared Policy'
         if version:
             df, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
         else:
             # shared latest version policy
-            _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
-            df, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            df, version, history_response = cloudlet_object.list_shared_policy_versions(session, policy_id)
+            _, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
 
     if optjson:
         print_json(data=response.json())
     else:
         if not df.empty:
-            df.rename(columns={'description': 'notes'}, inplace=True)
-            columns = ['policyId', 'version', 'notes', 'modifiedBy', 'modifiedDate']
-            root_logger.info(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            if type == ' ':
+                history_columns = ['version', 'last modified', 'last editor', 'staging', 'production', 'notes']
+                history_df.fillna('', inplace=True)
+                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, maxcolwidths=60,
+                                        tablefmt='psql', showindex=False, numalign='center'))
+            else:
+                # df.rename(columns={'description': 'notes'}, inplace=True)
+                # columns = ['policyId', 'version', 'notes', 'modifiedBy', 'modifiedDate']
+                # root_logger.info(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                history_df = df.copy()
+                history_columns = ['version', 'lock', 'last modified', 'last editor', 'notes']
+                history_df = history_df.rename(columns={'modifiedDate': 'last modified',
+                                                        'createdBy': 'last editor',
+                                                        'version notes': 'notes'})
 
-    # Writing full json
+                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, tablefmt='psql', showindex=False, numalign='center'))
+    # Writing full json from latest version
     json_file = 'policy.json'
     with open(json_file, 'w') as f:
         json.dump(response.json(), f, indent=4)
@@ -877,7 +915,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     if not version:
         version = utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger)
         if not version:
-            _, version = cloudlet_object.list_shared_policy_versions(session, policy_id)
+            _, version, _ = cloudlet_object.list_shared_policy_versions(session, policy_id)
     start_time = time.perf_counter()
     if type == ' ':
         if network == 'production':
