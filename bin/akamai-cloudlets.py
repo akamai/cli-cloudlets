@@ -1086,6 +1086,23 @@ def alb_lookup_origin(config, type, name_contains, optjson):
             root_logger.info('not found')
 
 
+@cli.command(short_help='ALB - Get a conditional origin')
+@click.option('--origin-id', metavar='', help='originId', required=True)
+@pass_config
+def alb_list_origin_version(config, origin_id):
+    """
+    Get data for a specific conditional origin
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.list_load_balancing_version(session, origin_id)
+
+    df = pd.DataFrame(response.json())
+    columns = ['originId', 'version', 'description', 'createdBy', 'createdDate', 'deleted', 'immutable', 'lastModifiedBy', 'lastModifiedDate']
+    root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True))
+
+
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])
     if os.getenv('AKAMAI_CLI'):
