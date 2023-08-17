@@ -1100,7 +1100,52 @@ def alb_list_origin_version(config, origin_id):
 
     df = pd.DataFrame(response.json())
     columns = ['originId', 'version', 'description', 'createdBy', 'createdDate', 'deleted', 'immutable', 'lastModifiedBy', 'lastModifiedDate']
-    root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True))
+    root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True, maxcolwidths=30))
+
+
+@cli.command(short_help='ALB - Get load balancing version')
+@click.option('--origin-id', metavar='', help='originId', required=True)
+@click.option('--version', metavar='', help='version', required=True)
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
+@pass_config
+def alb_loadbalancing_version(config, origin_id, version, optjson):
+    """
+    Get load balancing version
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.get_load_balancing_version(session, origin_id, version)
+
+    df = pd.DataFrame(response.json())
+    if optjson:
+        print_json(data=response.json())
+    else:
+        sections = []
+        sections.append(['originId', 'balancingType', 'version', 'description', 'createdBy', 'createdDate',
+                        'lastModifiedBy', 'lastModifiedDate', 'deleted', 'immutable'])
+        sections.append(['dataCenters'])
+        sections.append(['warnings'])
+
+        for section in sections:
+            if len(section) == 1:
+                print()
+                root_logger.info(section[0])
+                section_data = pd.json_normalize(df[section[0]])
+                columns = section_data.columns.tolist()
+                if section[0] == 'dataCenters':
+                    if 'livenessHosts' in section_data.columns:
+                        columns.remove('livenessHosts')
+                        root_logger.info(tabulate(section_data[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
+                        print()
+                        root_logger.info('livenessHosts')
+                        root_logger.info(tabulate(section_data['livenessHosts'], numalign='center', tablefmt='psql', showindex=False))
+
+                else:
+                    root_logger.info(tabulate(section_data, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+
+            else:
+                root_logger.info(tabulate(df[section], headers=section, numalign='center', tablefmt='psql', showindex=False))
 
 
 def get_prog_name():
