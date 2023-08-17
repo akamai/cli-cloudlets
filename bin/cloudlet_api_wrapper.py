@@ -438,8 +438,10 @@ class Cloudlet:
             url = url + account_switch_key
         return url
 
-    def list_alb_conditional_origin(self, session, type: str):
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins?type={type}'
+    def list_alb_conditional_origin(self, session, type: str | None = None):
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins'
+        if type:
+            url = f'{url}?type={type}'
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
         return response

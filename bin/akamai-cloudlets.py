@@ -1045,6 +1045,47 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
             print(f"AdditionalDescription: {response.json()['additionalDescription']}")
 
 
+@cli.command(short_help='Application Load Balancer (ALB) origins')
+@click.option('--type', metavar='', help='filter specific type.  Options: "alb", "ns", "customer"',
+              default='alb',
+              type=click.Choice(['alb', 'ns', 'customer']), required=False)
+@click.option('--name-contains', metavar='', help='String to use for searching for originId', required=False)
+@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
+@pass_config
+def alb_lookup_origin(config, type, name_contains, optjson):
+    """
+    Lists the Application Load Balancer conditonal origins.
+    """
+    if type == 'alb':
+        type = 'APPLICATION_LOAD_BALANCER'
+    elif type == 'ns':
+        type = 'NETSTORAGE'
+    elif type == 'customer':
+        type = 'CUSTOMER'
+    else:
+        type = None
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.list_alb_conditional_origin(session, type)
+
+    if optjson:
+        print_json(data=response.json())
+    else:
+        columns = ['originId']
+        df = pd.DataFrame(response.json())
+        if name_contains and not df.empty:
+            df = df[df['originId'].str.contains(name_contains, case=False)]
+
+        df = df.sort_values(by='originId', key=lambda col: col.str.lower())
+        df = df.fillna('')
+        df = df.reset_index(drop=True)
+        if not df.empty:
+            root_logger.info(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        else:
+            root_logger.info('not found')
+
+
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])
     if os.getenv('AKAMAI_CLI'):
