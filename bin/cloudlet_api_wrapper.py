@@ -437,3 +437,122 @@ class Cloudlet:
             account_switch_key = self.account_switch_key.translate(self.account_switch_key.maketrans('&', '?'))
             url = url + account_switch_key
         return url
+
+    def list_alb_conditional_origin(self, session, type: str):
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins?type={type}'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        return response
+
+    def get_alb_conditional_origin(self, session, origin_id: str):
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        return response
+
+    def create_load_balancing_config(self, session, origin_id: str, description: str):
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins'
+        headers = {'accept': 'application/json'}
+        payload = {
+            'description': description,
+            'originId': origin_id
+        }
+        response = session.post(self.form_url(url), json=payload, headers=headers)
+        return response
+
+    def update_load_balancing_config(self, session, origin_id: str, description: str | None = None):
+        """Update description only"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}'
+        headers = {'accept': 'application/json'}
+
+        if description:
+            payload = {}
+            payload['description'] = description
+            response = session.put(self.form_url(url), json=payload, headers=headers)
+            return response
+
+    def list_load_balancing_version(self, session, origin_id: str):
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/versions'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        return response
+
+    def get_load_balancing_version(self, session, origin_id: str, version: int):
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/versions/{version}?validate=true'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        return response
+
+    def manage_load_balancing_version(self, session, origin_id: str,
+                                      action: bool,
+                                      balancing_type: str,
+                                      datacenters: list,
+                                      description: str,
+                                      livenessSettings: dict):
+        """create or delete load balancing version"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/versions'
+        headers = {'accept': 'application/json'}
+        payload = {'balancingType': balancing_type,
+                   'delete': action}
+        if description:
+            payload['description'] = description
+        if datacenters:
+            payload['dataCenters'] = datacenters
+        if livenessSettings:
+            payload['livenessSettings'] = livenessSettings
+        if origin_id:
+            payload['originId'] = origin_id
+        response = session.post(self.form_url(url), json=payload, headers=headers)
+        return response
+
+    def update_load_balancing_version(self, session, origin_id: str,
+                                      version: int,
+                                      action: bool,
+                                      balancing_type: str,
+                                      datacenters: list,
+                                      description: str,
+                                      livenessSettings: dict):
+        """update a selected load balancer version, not yet activated"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/versions/{version}'
+        headers = {'accept': 'application/json'}
+        payload = {'balancingType': balancing_type}
+        if action:
+            payload['deleted'] = action
+        if description:
+            payload['description'] = description
+        if datacenters:
+            payload['dataCenters'] = datacenters
+        if livenessSettings:
+            payload['livenessSettings'] = livenessSettings
+        if origin_id:
+            payload['originId'] = origin_id
+        response = session.put(self.form_url(url), json=payload, headers=headers)
+        return response
+
+    def list_all_load_balancing_activation(self, session):
+        """list all the current load balancing activations"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/currentActivations'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        return response
+
+    def list_load_balancing_config_activation(self, session, origin_id: str):
+        """list all the current load balancing activations"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/activations'
+        headers = {'accept': 'application/json'}
+        response = session.get(self.form_url(url), headers=headers)
+        return response
+
+    def activation_load_balancing_config_version(self, session, origin_id: str, version: int, network: str, dryrun: bool):
+        """Activate the selected load balancing version.
+        The load balancing version status is either active or inactive."""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/activations?async=true'
+        headers = {'accept': 'application/json'}
+        payload = {
+            'network': network,
+            'version': version
+        }
+        if dryrun:
+            payload['dryrun'] = True
+        response = session.post(self.form_url(url), json=payload, headers=headers)
+        return response
