@@ -76,6 +76,7 @@ Main program file that wraps this functionality in a command line utility:
 - [delete-policy](#delete-policy)
 - [activate](#activate)
 - [activation-status](#activation-status)
+- [alb-update](#alb-update)
 
 ## Global Flags
 
@@ -306,6 +307,22 @@ Argument Details:
 ```xml
   --policy-id   Policy Id  [required]
   --network     Akamai network (staging or production)
+```
+
+### alb-update
+
+Update load balancing description
+
+```xml
+%  akamai cloudlets alb-update --lb sample --descr "ok to delete"
+%  akamai cloudlets alb-update --lb sample --descr "udpate via cli"
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match) [required]
+  --descr     description  [required]
 ```
 
 # Contribution

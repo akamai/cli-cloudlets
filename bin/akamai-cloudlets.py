@@ -1075,62 +1075,24 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
             print(f"AdditionalDescription: {response.json()['additionalDescription']}")
 
 
-@cli.command(short_help='Application Load Balancer (ALB) origins')
-@click.option('--type', metavar='', help='filter specific type.  Options: "alb", "ns", "customer"',
-              default='alb',
-              type=click.Choice(['alb', 'ns', 'customer']), required=False)
-@click.option('--name-contains', metavar='', help='String to use for searching for originId', required=False)
-@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
+@cli.command(short_help='ALB - Update load balancing description')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--descr', metavar='', help='description', required=True)
 @pass_config
-def alb_lookup_origin(config, type, name_contains, optjson):
+def alb_update(config, loadbalance, descr):
     """
-    Lists the Application Load Balancer conditonal origins.
+    Update load balancing description
     """
-    if type == 'alb':
-        type = 'APPLICATION_LOAD_BALANCER'
-    elif type == 'ns':
-        type = 'NETSTORAGE'
-    elif type == 'customer':
-        type = 'CUSTOMER'
-    else:
-        type = None
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.list_alb_conditional_origin(session, type)
-
-    if optjson:
+    response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr)
+    if response.status_code == 200:
+        msg = f"Update load balancing '{response.json()['originId']}'"
+        msg = f"{msg} description to '{response.json()['description']}' succesfully"
+        root_logger.info(msg)
+    else:
         print_json(data=response.json())
-    else:
-        columns = ['originId']
-        df = pd.DataFrame(response.json())
-        if name_contains and not df.empty:
-            df = df[df['originId'].str.contains(name_contains, case=False)]
-
-        df = df.sort_values(by='originId', key=lambda col: col.str.lower())
-        df = df.fillna('')
-        df = df.reset_index(drop=True)
-        if not df.empty:
-            root_logger.info(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
-        else:
-            root_logger.info('not found')
-
-
-@cli.command(short_help='ALB - Get a conditional origin')
-@click.option('--origin-id', metavar='', help='originId', required=True)
-@pass_config
-def alb_list_origin_version(config, origin_id):
-    """
-    Get data for a specific conditional origin
-    """
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.list_load_balancing_version(session, origin_id)
-
-    df = pd.DataFrame(response.json())
-    columns = ['originId', 'version', 'description', 'createdBy', 'createdDate', 'deleted', 'immutable', 'lastModifiedBy', 'lastModifiedDate']
-    root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True, maxcolwidths=30))
 
 
 @cli.command(short_help='Remove policy')
