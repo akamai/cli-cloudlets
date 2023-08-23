@@ -73,6 +73,7 @@ Main program file that wraps this functionality in a command line utility:
 - [update](#update)
 - [clone](#clone)
 - [create-policy](#create-policy)
+- [delete-policy](#delete-policy)
 - [activate](#activate)
 - [activation-status](#activation-status)
 
@@ -249,6 +250,22 @@ Argument Details:
                     (please specify either --group-id or --group-name)
   --share           Shared policy [optional]
   --notes           Policy Notes [optional]
+```
+
+### delete-policy
+
+Remove a cloudlet policy
+
+```xml
+%  akamai cloudlets delete-policy --policy-id 12345
+%  akamai cloudlets delete-policy --input remove_list.csv
+```
+
+Argument Details:
+
+```xml
+  --policy-id   policyId
+  --input       csv input file contains policyId per line without header
 ```
 
 ### activate

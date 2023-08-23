@@ -1103,49 +1103,30 @@ def alb_list_origin_version(config, origin_id):
     root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True, maxcolwidths=30))
 
 
-@cli.command(short_help='ALB - Get load balancing version')
-@click.option('--origin-id', metavar='', help='originId', required=True)
-@click.option('--version', metavar='', help='version', required=True)
-@click.option('--json', 'optjson', metavar='', help='Output the policy details in json format', is_flag=True, required=False)
+@cli.command(short_help='Remove policy')
+@click.option('--policy-id', metavar='', help='policyId', required=False)
+@click.option('--input', metavar='', help='csv input file contains policyID per line without header', required=False)
 @pass_config
-def alb_loadbalancing_version(config, origin_id, version, optjson):
+def delete_policy(config, policy_id, input):
     """
-    Get load balancing version
+    Delete cloudlet policy
     """
+    if policy_id and input:
+        sys.exit(root_logger.info('Please use either policy-id or input, not both'))
+
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.get_load_balancing_version(session, origin_id, version)
+    if policy_id:
+        response_msg = cloudlet_object.delete_policy(session, policy_id)
+        root_logger.info(response_msg)
 
-    df = pd.DataFrame(response.json())
-    if optjson:
-        print_json(data=response.json())
-    else:
-        sections = []
-        sections.append(['originId', 'balancingType', 'version', 'description', 'createdBy', 'createdDate',
-                        'lastModifiedBy', 'lastModifiedDate', 'deleted', 'immutable'])
-        sections.append(['dataCenters'])
-        sections.append(['warnings'])
+    if input:
+        df = pd.read_csv(input, names=['id'])
+        df['delete_message'] = df['id'].apply(lambda id: cloudlet_object.delete_policy(session, id))
 
-        for section in sections:
-            if len(section) == 1:
-                print()
-                root_logger.info(section[0])
-                section_data = pd.json_normalize(df[section[0]])
-                columns = section_data.columns.tolist()
-                if section[0] == 'dataCenters':
-                    if 'livenessHosts' in section_data.columns:
-                        columns.remove('livenessHosts')
-                        root_logger.info(tabulate(section_data[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
-                        print()
-                        root_logger.info('livenessHosts')
-                        root_logger.info(tabulate(section_data['livenessHosts'], numalign='center', tablefmt='psql', showindex=False))
-
-                else:
-                    root_logger.info(tabulate(section_data, headers='keys', numalign='center', tablefmt='psql', showindex=False))
-
-            else:
-                root_logger.info(tabulate(df[section], headers=section, numalign='center', tablefmt='psql', showindex=False))
+        df = df.rename(columns={'id': 'Policy ID'})
+        root_logger.info(tabulate(df, headers='keys', tablefmt='psql', numalign='center'))
 
 
 def get_prog_name():

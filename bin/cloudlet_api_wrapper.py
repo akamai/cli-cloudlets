@@ -438,6 +438,17 @@ class Cloudlet:
             url = url + account_switch_key
         return url
 
+    def delete_policy(self, session, policy_id: str):
+        """delete cloudlet policy"""
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}'
+
+        response = session.delete(self.form_url(url))
+        if response.status_code == 204:
+            msg = 'remove success'
+        else:
+            msg = response.json()['errorMessage']
+        return msg
+
     def list_alb_conditional_origin(self, session, type: str | None = None):
         url = f'https://{self.access_hostname}/cloudlets/api/v2/origins'
         if type:
