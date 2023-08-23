@@ -98,7 +98,7 @@ Display cloudlet policy types available for the account. Display name, code, and
 
 ### list
 
-List all cloudlet policies. Result is sorted by policy name (case insensitive)
+List all cloudlet policies.
 Also search by --name-contains or --cloudlet-type (optional)
 Output can be piped to json or csv format (optional)
 
@@ -106,6 +106,7 @@ Output can be piped to json or csv format (optional)
 %  akamai cloudlets list
 %  akamai cloudlets list --name-contains namestring
 %  akamai cloudlets list --cloudlet-type ER
+%  akamai cloudlets list --cloudlet-type ER --sortby lastmodified
 %  akamai cloudlets list --name-contains namestring --cloudlet-type ALB
 %  akamai cloudlets list --json
 %  akamai cloudlets list --csv > sample.csv
@@ -118,6 +119,7 @@ Argument Details:
   --csv             Output the policy details in csv format
   --cloudlet-type   Abbreviation code for cloudlet type
   --name-contains   String to use for searching for policies by name
+  --sortby          Sort by column name
 ```
 
 ### policy-endpoint

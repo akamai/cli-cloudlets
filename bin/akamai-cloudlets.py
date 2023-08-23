@@ -166,10 +166,13 @@ def cloudlets(config):
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
 @click.option('--name-contains', metavar='', help='String to use for searching for policies by name', required=False)
+@click.option('--sortby', metavar='', help='Sort by column name',
+              type=click.Choice(['id', 'name', 'type', 'lastmodified'], case_sensitive=True),
+              required=False)
 @pass_config
-def list(config, optjson, optcsv, cloudlet_type, name_contains):
+def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
     '''
-    List all cloudlet policies. Result is sorted by policy name
+    List all cloudlet policies.
     '''
     base_url, session = init_config(config.edgerc, config.section)
 
@@ -199,18 +202,38 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
         policy_df = pd.DataFrame(policies_data)
         policy_df['Shared Policy'] = pd.Series(dtype='str')
         policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
+        policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
+        policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
 
     shared_policies = cloudlet_object.list_shared_policies(session)
+
     shared_df = pd.DataFrame(shared_policies)
-    shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name', 'cloudletType': 'Type', 'groupId': 'Group ID'}, inplace=True)
+    shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name',
+                              'cloudletType': 'Type',
+                              'groupId': 'Group ID'}, inplace=True)
+    shared_df['lastModifiedDate'] = shared_df['modifiedDate'].apply(utility_object.convert_datetime_format)
     shared_df['Shared Policy'] = '* shared'
 
     df = pd.DataFrame()
     if not policy_df.empty or not shared_df.empty:
         df = pd.concat([policy_df, shared_df], ignore_index=True)
         df.fillna('', inplace=True)
-        df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy']]
-        df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
+        df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate']]
+        if sortby is None:
+            df.sort_values(by=['Policy Name'], inplace=True, key=lambda col: col.str.lower())
+        else:
+            if sortby == 'name':
+                sort_by = 'Policy Name'
+                df.sort_values(sort_by, inplace=True, key=lambda col: col.str.lower())
+            elif sortby == 'lastmodified':
+                sort_by = 'lastModifiedDate'
+                df = df.sort_values(sort_by, ascending=False)
+            else:
+                if sortby == 'type':
+                    sort_by = 'Type'
+                if sortby == 'id':
+                    sort_by = 'Policy ID'
+                df = df.sort_values(sort_by, ascending=True)
         df.reset_index(drop=True, inplace=True)
 
     if name_contains and not df.empty:  # check whether user passed a filter
@@ -226,16 +249,23 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
             print_json(df.to_json(orient='records'))
     elif optcsv:
         if not df.empty:
-            df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
-            with open('temp_output.csv') as f:
+            if cloudlet_type is None:
+                filepath = 'output_policy.csv'
+            else:
+                filepath = f'output_policy_{cloudlet_type}.csv'
+            df.to_csv(filepath, header=True, index=None, sep=',', mode='w')
+            with open(filepath) as f:
                 for line in f:
                     print(line.rstrip())
-            os.remove('temp_output.csv')
     else:
         if not df.empty:
             print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
 
     root_logger.info(f'{len(df.index)} policies found')
+
+    if optcsv:
+        print()
+        root_logger.info(f'Output file saved - {filepath}')
 
 
 @cli.command(short_help='Retrieve policy detail version')

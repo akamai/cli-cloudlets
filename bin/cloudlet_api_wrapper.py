@@ -323,7 +323,8 @@ class Cloudlet:
         if cloudlet_type:
             if not schemas_df.empty:
                 columns = ['action', 'endpoint']
-                print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
+                # no need to display
+                # print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
 
         if template:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'

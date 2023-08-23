@@ -16,11 +16,13 @@ from __future__ import annotations
 import ast
 import json
 import time
+from datetime import datetime
 
 import click
 import pandas as pd
 from openpyxl import load_workbook
 from pandas.io.formats.excel import ExcelFormatter
+from rich import print_json
 from rich.live import Live
 from rich.table import Table
 from tabulate import tabulate
@@ -343,6 +345,17 @@ class Utility:
             worksheet.freeze_panes(1, 2)
             worksheet.autofit()
         writer.close()
+
+    def convert_df_float_to_int(self, value):
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return ''
+
+    def convert_datetime_format(self, datetime_str):
+        original_datetime = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        formatted_datetime = original_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        return formatted_datetime
 
 
 class PythonLiteralOption(click.Option):
