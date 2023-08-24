@@ -45,7 +45,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.1.1'
+PACKAGE_VERSION = '1.1.2'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -480,6 +480,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                             sheet2 = pd.DataFrame()
                         else:
                             sheet1 = original_df[columns]
+                            sheet1 = sheet1.fillna('')
                             root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
 
                             print()
