@@ -76,9 +76,10 @@ Main program file that wraps this functionality in a command line utility:
 - [delete-policy](#delete-policy)
 - [activate](#activate)
 - [activation-status](#activation-status)
-- [alb-update](#alb-update)
-- [alb-origin](#alb-origin)
 - [alb-download](#alb-download)
+- [alb-origin](#alb-origin)
+- [alb-origin-bulk](#alb-origin-bulk)
+- [alb-update](#alb-update)
 
 ## Global Flags
 
@@ -311,20 +312,20 @@ Argument Details:
   --network     Akamai network (staging or production)
 ```
 
-### alb-update
+### alb-download
 
-Update load balancing description
+Retrieve all data centers from ALB policy based on an input CSV file. This only pulls ALB policies with data centers
 
 ```xml
-%  akamai cloudlets alb-update --lb sample --descr "ok to delete"
-%  akamai cloudlets alb-update --lb sample --descr "udpate via cli"
+%  akamai cloudlets alb-download --input policy_ALB.csv
+%  akamai cloudlets alb-download --input policy_ALB.csv --csv
 ```
 
 Argument Details:
 
 ```xml
-  --lb        load balancing name (case sensitive, require exact name match) [required]
-  --descr     description  [required]
+  --input     csv input file  [required]
+  --csv       Output the policy details in csv format
 ```
 
 ### alb-origin
@@ -352,20 +353,39 @@ Argument Details:
   --json            Output the load balancing details in json format
 ```
 
-### alb-download
+### alb-origin-bulk
 
-Retrieve all data centers from ALB policy based on an input CSV file. This only pulls ALB policies with data centers
+Lookup origins from multiple ALB policies. You can retrieve a list of all load balancing IDs from alb-download command.
 
 ```xml
-%  akamai cloudlets alb-download --input policy_ALB.csv
-%  akamai cloudlets alb-download --input policy_ALB.csv --csv
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version production
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version staging
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version latest
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version latest --csv
 ```
 
 Argument Details:
 
 ```xml
   --input     csv input file  [required]
+  --version   Fetch version.  Options = ["production", "staging", "latest"] [required]
   --csv       Output the policy details in csv format
+```
+
+### alb-update
+
+Update load balancing description
+
+```xml
+%  akamai cloudlets alb-update --lb sample --descr "ok to delete"
+%  akamai cloudlets alb-update --lb sample --descr "udpate via cli"
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match) [required]
+  --descr     description  [required]
 ```
 
 # Contribution

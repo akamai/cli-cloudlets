@@ -381,6 +381,53 @@ class Utility:
         formatted_datetime = original_datetime.strftime('%Y-%m-%d %H:%M:%S')
         return formatted_datetime
 
+    def alb_active_version(self, session, cloudlet_object, root_logger, origin_id: str, request_version: str) -> int:
+        resp = cloudlet_object.list_load_balancing_config_activation(session, origin_id)
+        response = resp.json()
+        version = None
+        if resp.status_code == 200 and len(response) > 0:
+            if request_version == 'latest':
+                version = max(item['version'] for item in response)
+            else:
+                try:
+                    version = [each['version'] for each in response if each['network'] == f'{request_version.upper()}' and each['status'] == 'active']
+                except:
+                    print_json(data=response)
+                    root_logger.info(f'{origin_id:<40} no activation found on {request_version.upper()} network')
+
+        if version is None:
+            try:
+                return max(item['version'] for item in response)
+            except:
+                root_logger.info(f'{origin_id:<40} no activation found {resp.status_code}')
+                print_json(data=response)
+        elif len(version) == 0:
+            root_logger.info(f'{origin_id:<40} no activation found on {request_version.upper()} network')
+        else:
+            if isinstance(version, int):
+                return version
+            if isinstance(version, list):
+                if len(version) > 0:
+                    return version[0]
+
+    def fetch_data_centers(self, session, cloudlet_object, row):
+        response = cloudlet_object.get_load_balancing_version(session, row['loadbalance'], int(row['version'])).json()
+        return response['dataCenters']
+
+    def extract_loadbalaner_fields(self, datacenter_list):
+        result = []
+        if datacenter_list is not None:
+            for dc in datacenter_list:
+                if dc is not None:
+                    dc_dict = {
+                        'hostname': dc.get('hostname'),
+                        'originId': dc.get('originId'),
+                        'percent': dc.get('percent')
+                    }
+                    if any(dc_dict.values()):  # Check if at least one value is not None
+                        result.append(dc_dict)
+        return result
+
 
 class PythonLiteralOption(click.Option):
 

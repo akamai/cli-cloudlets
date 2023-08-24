@@ -1078,7 +1078,7 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
             print(f"AdditionalDescription: {response.json()['additionalDescription']}")
 
 
-@cli.command(short_help='ALB - Origins/Data Centers')
+@cli.command(short_help='ALB - lookup origins from a single ALB policy')
 @click.option('--type', metavar='', help='filter specific type.  Options: "alb", "ns", "customer"',
               default='alb',
               type=click.Choice(['alb', 'ns', 'customer']), required=False)
@@ -1355,13 +1355,54 @@ def alb_download(config, input, optcsv):
         root_logger.info(f'\nOutput file saved - {file}')
         file = 'lb.csv'
         alb_df.to_csv(file, header=True, index=None, sep=',', mode='w')
-        root_logger.info(f'Output file saved - {file:<30}  You can use this file as an input for alb-detail command.')
+        root_logger.info(f'Output file saved - {file:<30}  You can use this file as an input for alb-origin-bulk command.')
     else:
         columns = ['Policy ID', 'Policy Name', 'Shared Policy', 'LATEST', 'STAGING', 'PRODUCTION', 'Load Balancing ID']
         root_logger.info('\nALB policy with activation history')
         root_logger.info(tabulate(df[columns], headers=columns, tablefmt='psql', numalign='center', showindex=True, maxcolwidths=70))
         root_logger.info('\nAll load balancing IDs')
         root_logger.info(tabulate(alb_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+
+
+@cli.command(short_help='ALB - lookup origins from multiple ALB policies')
+@click.option('--input', metavar='', help='csv input file', required=True)
+@click.option('--version', metavar='', help='Fetch version.  Options = ["production", "staging", "latest"]',
+              type=click.Choice(['production', 'staging', 'latest']), multiple=False, required=True)
+@click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
+@pass_config
+def alb_origin_bulk(config, input, version, optcsv):
+    """Lookup origins from multiple ALB policies\n
+       You can retrieve a list of all load balancing IDs from alb-download command.
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    utility_object = Utility()
+    df = pd.read_csv(input, names=['loadbalance'], skiprows=1)
+
+    df['version'] = df['loadbalance'].apply(lambda x: utility_object.alb_active_version(session, cloudlet_object, root_logger, x, version))
+    df = df.query('version.notna()')
+    df = df.sort_values(by='version', ascending=False)
+    df = df.reset_index(drop=True)
+    root_logger.debug(tabulate(df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+
+    df['dataCenters'] = df.apply(lambda row: utility_object.fetch_data_centers(session, cloudlet_object, row), axis=1)
+    df_exploded = pd.json_normalize(df['dataCenters'])
+    df_exploded['dataCenter'] = df_exploded.apply(utility_object.extract_loadbalaner_fields, axis=1)
+    df_exploded = df_exploded.reset_index(drop=True)
+    df_normalized_datacenter = pd.json_normalize(df_exploded['dataCenter'])
+    df = df.drop(['dataCenters'], axis=1)
+
+    # rebuild column name based on number of datacenters
+    num_datacenters = len(df_normalized_datacenter.columns)
+    new_columns = [f'datacenter_{i+1}' for i in range(num_datacenters)]
+    df_normalized_datacenter.columns = new_columns
+    result_df = pd.concat([df, df_normalized_datacenter], axis=1)
+    root_logger.info(tabulate(result_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+    if optcsv:
+        file = 'alb_origin_detail.csv'
+        result_df.to_csv(file, index=False)
+        root_logger.info(f'Output file saved - {file}')
 
 
 def get_prog_name():
