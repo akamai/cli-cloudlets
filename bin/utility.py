@@ -400,8 +400,11 @@ class Utility:
                 return max(item['version'] for item in response)
             except:
                 root_logger.info(f'{origin_id:<40} no activation found {resp.status_code}')
-                print_json(data=response)
-        elif len(version) == 0:
+                # print_json(data=response)
+        elif isinstance(version, int):
+            version = max(item['version'] for item in response)
+            return version
+        elif isinstance(version, list) and len(version) == 0:
             root_logger.info(f'{origin_id:<40} no activation found on {request_version.upper()} network')
         else:
             if isinstance(version, int):
