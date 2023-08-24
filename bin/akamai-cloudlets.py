@@ -250,9 +250,9 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
     elif optcsv:
         if not df.empty:
             if cloudlet_type is None:
-                filepath = 'output_policy.csv'
+                filepath = 'policy.csv'
             else:
-                filepath = f'output_policy_{cloudlet_type}.csv'
+                filepath = f'policy_{cloudlet_type}.csv'
             df.to_csv(filepath, header=True, index=None, sep=',', mode='w')
             with open(filepath) as f:
                 for line in f:
@@ -265,7 +265,10 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
 
     if optcsv:
         print()
-        root_logger.info(f'Output file saved - {filepath}')
+        msg = ''
+        if cloudlet_type == 'ALB':
+            msg = 'You can use this as an input for alb-download command'
+        root_logger.info(f'Output file saved - {filepath:<20} {msg}')
 
 
 @cli.command(short_help='Retrieve policy detail version')
@@ -1296,6 +1299,69 @@ def delete_policy(config, policy_id, input):
 
         df = df.rename(columns={'id': 'Policy ID'})
         root_logger.info(tabulate(df, headers='keys', tablefmt='psql', numalign='center'))
+
+
+@cli.command(short_help='ALB - download all origins/data centers')
+@click.option('--input', metavar='', help='csv input file', required=True)
+@click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
+@pass_config
+def alb_download(config, input, optcsv):
+    """ Retrieve all data centers from ALB policy based on an input CSV file.\n
+        This only pulls ALB policies with activation history
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    utility_object = Utility()
+
+    df = pd.read_csv(input, names=['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate'], skiprows=1)
+    df['version'] = df['Policy ID'].apply(lambda x: utility_object.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=x)[3]['activations'])
+
+    nohistory = df.query('version.str.len() == 0')
+    nohistory = nohistory.fillna('')
+    nohistory = nohistory.reset_index(drop=True)
+    if not nohistory.empty:
+        root_logger.info('\nALB policy without activation history')
+        del nohistory['version']
+        root_logger.info(tabulate(nohistory, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+
+    df = df.query('version.str.len() > 0')
+    df = df.fillna('')
+    df = df.reset_index(drop=True)
+
+    df['LATEST'] = df['Policy ID'].apply(lambda x: utility_object.get_latest_version(session, cloudlet_object, x, root_logger))
+    df['PRODUCTION'] = df['Policy ID'].apply(lambda x: utility_object.get_production_version(session, root_logger, cloudlet_object, policy_id=x))
+    df['STAGING'] = df['Policy ID'].apply(lambda x: utility_object.get_staging_version(session, root_logger, cloudlet_object, policy_id=x))
+    df['PRODUCTION'] = df['PRODUCTION'].apply(utility_object.convert_df_float_to_int)
+    df['STAGING'] = df['STAGING'].apply(utility_object.convert_df_float_to_int)
+    df['albMatchRule'] = df.apply(lambda row: cloudlet_object.get_policy_version(session, policy_id=row['Policy ID'], version=row['PRODUCTION']
+                                                                                 if row['PRODUCTION'] else row['STAGING']).json()['matchRules'], axis=1)
+    df['loadbalance'] = df['albMatchRule'].apply(lambda x: [rule['forwardSettings']['originId']
+                                                            for rule in x if x is not None] if x else [])
+    df = df.query('loadbalance.str.len() > 0')
+    df = df.fillna('')
+    df = df.reset_index(drop=True)
+    del df['albMatchRule']
+    del df['version']
+    df['loadbalance'] = df['loadbalance'].apply(lambda x: set(x))
+    df['loadbalance'] = df['loadbalance'].apply(lambda x: sorted(x))
+    df = df.rename(columns={'loadbalance': 'Load Balancing ID'})
+    combined_all_lbs = sorted(df['Load Balancing ID'].explode().tolist())
+    alb_df = pd.DataFrame(combined_all_lbs, columns=['Load Balancing ID'])
+
+    if optcsv:
+        file = 'alb_policy_with_lb.csv'
+        df.to_csv(file, header=True, index=None, sep=',', mode='w')
+        root_logger.info(f'\nOutput file saved - {file}')
+        file = 'lb.csv'
+        alb_df.to_csv(file, header=True, index=None, sep=',', mode='w')
+        root_logger.info(f'Output file saved - {file:<30}  You can use this file as an input for alb-detail command.')
+    else:
+        columns = ['Policy ID', 'Policy Name', 'Shared Policy', 'LATEST', 'STAGING', 'PRODUCTION', 'Load Balancing ID']
+        root_logger.info('\nALB policy with activation history')
+        root_logger.info(tabulate(df[columns], headers=columns, tablefmt='psql', numalign='center', showindex=True, maxcolwidths=70))
+        root_logger.info('\nAll load balancing IDs')
+        root_logger.info(tabulate(alb_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
 
 
 def get_prog_name():

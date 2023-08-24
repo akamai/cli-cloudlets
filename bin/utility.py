@@ -115,6 +115,30 @@ class Utility:
             else:
                 root_logger.info('ERROR: Unable to find latest version. Check if version exists')
 
+    def get_production_version(self, session, root_logger, cloudlet_object, policy_id) -> int:
+        """Fetch production version"""
+        _, _, _, resp = self.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=policy_id)
+
+        if resp['activations']:
+            for each in resp['activations']:
+                if each['network'] == 'prod':
+                    if each['policyInfo']['status'] == 'active':
+                        return each['policyInfo']['version']
+        else:
+            root_logger.info('no activation history')
+
+    def get_staging_version(self, session, root_logger, cloudlet_object, policy_id) -> int:
+        """Fetch staging version"""
+        _, _, _, resp = self.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=policy_id)
+
+        if resp['activations']:
+            for each in resp['activations']:
+                if each['network'] == 'staging':
+                    if each['policyInfo']['status'] == 'active':
+                        return each['policyInfo']['version']
+        else:
+            root_logger.info('no activation history')
+
     def check_group_input(self, root_logger,
                                 group_name: str | None = None,
                                 group_id: int | None = None) -> None:

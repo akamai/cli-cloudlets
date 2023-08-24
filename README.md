@@ -78,6 +78,7 @@ Main program file that wraps this functionality in a command line utility:
 - [activation-status](#activation-status)
 - [alb-update](#alb-update)
 - [alb-origin](#alb-origin)
+- [alb-download](#alb-download)
 
 ## Global Flags
 
@@ -349,6 +350,22 @@ Argument Details:
   --lb              load balancing name (case sensitive, require exact name match)
   --version         load balance version
   --json            Output the load balancing details in json format
+```
+
+### alb-download
+
+Retrieve all data centers from ALB policy based on an input CSV file. This only pulls ALB policies with data centers
+
+```xml
+%  akamai cloudlets alb-download --input policy_ALB.csv
+%  akamai cloudlets alb-download --input policy_ALB.csv --csv
+```
+
+Argument Details:
+
+```xml
+  --input     csv input file  [required]
+  --csv       Output the policy details in csv format
 ```
 
 # Contribution
