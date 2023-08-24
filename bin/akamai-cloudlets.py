@@ -1399,6 +1399,7 @@ def alb_origin_bulk(config, input, version, optcsv):
     new_columns = [f'datacenter_{i+1}' for i in range(num_datacenters)]
     df_normalized_datacenter.columns = new_columns
     result_df = pd.concat([df, df_normalized_datacenter], axis=1)
+    result_df = result_df.rename(columns={'loadbalance': 'Load Balancing ID'})
     root_logger.info(tabulate(result_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
     if optcsv:
         file = 'alb_origin_detail.csv'
