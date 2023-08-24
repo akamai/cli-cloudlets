@@ -552,7 +552,7 @@ class Cloudlet:
 
     def list_load_balancing_config_activation(self, session, origin_id: str):
         """list all the current load balancing activations"""
-        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/activations'
+        url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/activations?latestOnly=true'
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
         return response

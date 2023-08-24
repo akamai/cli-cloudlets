@@ -1075,6 +1075,183 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
             print(f"AdditionalDescription: {response.json()['additionalDescription']}")
 
 
+@cli.command(short_help='ALB - Origins/Data Centers')
+@click.option('--type', metavar='', help='filter specific type.  Options: "alb", "ns", "customer"',
+              default='alb',
+              type=click.Choice(['alb', 'ns', 'customer']), required=False)
+@click.option('--list', metavar='', help='list all load balancer', is_flag=True, required=False)
+@click.option('--name-contains', metavar='', help='String to use for searching for load balance (case insensitive)', required=False)
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=False)
+@click.option('--version', metavar='', help='load balance version', required=False)
+@click.option('--json', 'optjson', metavar='', help='Output the load balancing details in json format', is_flag=True, required=False)
+@pass_config
+def alb_origin(config, type, name_contains, list, loadbalance, version, optjson):
+    """
+    Lists the Application Load Balancer origins/data centers
+    """
+
+    if name_contains and list is False:
+        sys.exit(root_logger.info('missing --list argument'))
+
+    if type != 'alb' and list is False:
+        sys.exit(root_logger.info('missing --list argument'))
+
+    if type == 'alb':
+        type = 'APPLICATION_LOAD_BALANCER'
+    elif type == 'ns':
+        type = 'NETSTORAGE'
+    elif type == 'customer':
+        type = 'CUSTOMER'
+    else:
+        type = None
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    lookup_resp = cloudlet_object.list_alb_conditional_origin(session, type)
+
+    if list:
+        # if optjson:
+        #    print_json(data=lookup_resp.json())
+        df = pd.DataFrame(lookup_resp.json())
+        df = df.rename(columns={'originId': 'Load Balancing ID'})
+        if name_contains and not df.empty:
+            df = df[df['Load Balancing ID'].str.contains(name_contains, case=False)]
+
+        df = df.sort_values(by='Load Balancing ID', key=lambda col: col.str.lower())
+        df = df.fillna('')
+        df = df.reset_index(drop=True)
+        if not df.empty:
+            del df['akamaized']
+            del df['checksum']
+            root_logger.info(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        else:
+            root_logger.info('not found')
+
+    if loadbalance and version is None:
+        if type != 'APPLICATION_LOAD_BALANCER':
+            sys.exit(root_logger.info('Search only works with "ALB" type'))
+        lookup_resp = cloudlet_object.list_load_balancing_version(session, loadbalance)
+        if len(lookup_resp.json()) == 0:
+            sys.exit(f'{loadbalance} not found')
+        else:
+            version_df = pd.DataFrame(lookup_resp.json())
+            version_df = version_df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
+                                                    'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
+                                                    'description': 'Version Notes'})
+            version_columns = ['Load Balancing ID', 'version', 'deleted', 'lock', 'createdBy', 'createdDate', 'Last Editor', 'Last Modified']
+            version_df = version_df.fillna('')
+            if 'Version Notes' in version_df.columns:
+                version_columns.insert(2, 'Version Notes')
+
+        activation_resp = cloudlet_object.list_load_balancing_config_activation(session, loadbalance)
+        activation_df = pd.DataFrame()
+        if activation_resp.status_code == 200:
+            if len(activation_resp.json()) == 0:
+                root_logger.info('\nno activation history')
+            else:
+                df = pd.DataFrame(activation_resp.json())
+                df = df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
+                                        'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
+                                        'description': 'Version Notes'})
+                activation_df = df.pivot(index=['Load Balancing ID', 'version'], columns='network', values='status').reset_index()
+                activation_df = activation_df.fillna('')
+                activation_df = activation_df.sort_values(by='version', ascending=False)
+                activation_df = activation_df.reset_index(drop=True)
+
+        if not activation_df.empty:
+            merged_df = pd.merge(version_df, activation_df, on=['Load Balancing ID', 'version'], how='left')
+            merged_df = merged_df.fillna('')
+            columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'deleted']
+            if 'Version Notes' in merged_df.columns:
+                columns.insert(5, 'Version Notes')
+            if 'STAGING' in merged_df.columns:
+                columns.insert(6, 'STAGING')
+            if 'PRODUCTION' in merged_df.columns:
+                columns.insert(6, 'PRODUCTION')
+            root_logger.info(tabulate(merged_df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
+        else:
+            root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
+
+    if loadbalance and version:
+        version_resp = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
+
+        if version_resp.status_code != 200:
+            root_logger.info(version_resp.json()['detail'])
+
+            lookup_resp = cloudlet_object.list_load_balancing_version(session, loadbalance)
+            df = pd.DataFrame(lookup_resp.json())
+            df = df.rename(columns={'originId': 'Load Balancing ID'})
+            columns = ['Load Balancing ID', 'version', 'deleted', 'immutable', 'createdBy', 'createdDate', 'lastModifiedBy', 'lastModifiedDate']
+            df = df.fillna('')
+            if 'description' in df.columns:
+                columns.insert(2, 'description')
+
+            root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True, maxcolwidths=30))
+            sys.exit()
+
+        if isinstance(version_resp.json(), dict):
+            data = version_resp.json()
+            if 'livenessSettings' in data.keys():
+                data.pop('livenessSettings')
+            df = pd.DataFrame.from_dict(data)
+            df = df.rename(columns={'originId': 'Load Balancing ID'})
+        elif isinstance(version_resp.json(), list):
+            df = pd.DataFrame(version_resp.json())
+        else:
+            pass
+
+        if optjson:
+            print_json(data=version_resp.json())
+        else:
+            sections = []
+            sections.append(['Load Balancing ID', 'version', 'deleted', 'immutable',
+                             'createdBy', 'createdDate', 'lastModifiedBy', 'lastModifiedDate'])
+            sections.append(['dataCenters'])
+            sections.append(['livenessSettings'])
+            sections.append(['warnings'])
+            for section in sections:
+                print()
+                if len(section) == 1:
+                    if section[0] == 'livenessSettings':
+                        if 'livenessSettings' in version_resp.json().keys():
+                            print(section[0])
+                            live = version_resp.json()['livenessSettings']
+                            # print_json(data=live)
+                            live_df = pd.DataFrame([live])
+                            root_logger.info(tabulate(live_df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+                    try:
+                        section_data = pd.json_normalize(df[section[0]])
+                        columns = section_data.columns.tolist()
+                        if section[0] == 'dataCenters':
+                            print(section[0])
+                            section_data = section_data.rename(columns={'originId': 'Data Center'})
+                            datacenter_columns = ['Data Center', 'percent', 'city',
+                                                  'cloudServerHostHeaderOverride', 'cloudService',
+                                                  'continent', 'country', 'hostname', 'latitude', 'longitude']
+                            if 'livenessHosts' in section_data.columns:
+                                columns.remove('livenessHosts')
+                                root_logger.info(tabulate(section_data[datacenter_columns], headers=datacenter_columns, numalign='center', tablefmt='psql', showindex=False))
+                                print()
+                                root_logger.info('livenessHosts')
+                                root_logger.info(tabulate(section_data['livenessHosts'], numalign='center', tablefmt='psql', showindex=False))
+                            else:
+                                root_logger.info(tabulate(section_data[datacenter_columns], headers=datacenter_columns, numalign='center', tablefmt='psql', showindex=False))
+                        else:
+                            print(section[0])
+                            root_logger.info(tabulate(section_data, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+                    except KeyError:
+                        pass
+                else:
+                    try:
+                        if 'description' in df.columns:
+                            section.insert(3, 'description')
+                        if 'balancingType' in df.columns:
+                            section.insert(3, 'balancingType')
+                        root_logger.info(tabulate(df[section], headers=section, numalign='center', tablefmt='psql', showindex=False))
+                    except:
+                        root_logger.info(tabulate(df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+
+
 @cli.command(short_help='ALB - Update load balancing description')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--descr', metavar='', help='description', required=True)

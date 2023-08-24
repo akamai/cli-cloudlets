@@ -77,6 +77,7 @@ Main program file that wraps this functionality in a command line utility:
 - [activate](#activate)
 - [activation-status](#activation-status)
 - [alb-update](#alb-update)
+- [alb-origin](#alb-origin)
 
 ## Global Flags
 
@@ -323,6 +324,31 @@ Argument Details:
 ```xml
   --lb        load balancing name (case sensitive, require exact name match) [required]
   --descr     description  [required]
+```
+
+### alb-origin
+
+Lists the Application Load Balancer origins/data centers with activation history
+
+```xml
+%  akamai cloudlets alb-origin --list
+%  akamai cloudlets alb-origin --list --name-contains booking
+%  akamai cloudlets alb-origin --list --name-contains booking --lb myBooking
+%  akamai cloudlets alb-origin --list --name-contains booking --lb myBooking --version 3
+%  akamai cloudlets alb-origin --list --name-contains booking --lb myBooking --version 3 --json
+%  akamai cloudlets alb-origin --lb myBooking
+%  akamai cloudlets alb-origin --lb myBooking --version 3
+```
+
+Argument Details:
+
+```xml
+  --type            filter specific type.  Options: "alb", "ns", "customer"
+  --list            list all load balancers
+  --name-contains   String to use for searching for load balance (case insensitive)
+  --lb              load balancing name (case sensitive, require exact name match)
+  --version         load balance version
+  --json            Output the load balancing details in json format
 ```
 
 # Contribution
