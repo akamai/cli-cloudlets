@@ -372,6 +372,12 @@ Argument Details:
   --csv       Output the policy details in csv format
 ```
 
+You can run these commands to help get the input file needed for `alb-origin-bulk` command.
+
+1. Get a list of ALB policies `akamai cloudlets list --cloudlet-type ALB --csv`
+2. Get a list of associated load balancing ID `akamai cloudlets alb-download --input policy_alb.csv --csv`
+3. Collect origins/data centers for those load balancing IDs `akamai cloudlets alb-origin-bulk --input lb.csv --csv`
+
 ### alb-update
 
 Update load balancing description
