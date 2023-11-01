@@ -8,3 +8,4 @@ logs
 *.json
 *.sh
 !cli.json
+*.csv

@@ -16,11 +16,13 @@ from __future__ import annotations
 import ast
 import json
 import time
+from datetime import datetime
 
 import click
 import pandas as pd
 from openpyxl import load_workbook
 from pandas.io.formats.excel import ExcelFormatter
+from rich import print_json
 from rich.live import Live
 from rich.table import Table
 from tabulate import tabulate
@@ -112,6 +114,30 @@ class Utility:
                 return version
             else:
                 root_logger.info('ERROR: Unable to find latest version. Check if version exists')
+
+    def get_production_version(self, session, root_logger, cloudlet_object, policy_id) -> int:
+        """Fetch production version"""
+        _, _, _, resp = self.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=policy_id)
+
+        if resp['activations']:
+            for each in resp['activations']:
+                if each['network'] == 'prod':
+                    if each['policyInfo']['status'] == 'active':
+                        return each['policyInfo']['version']
+        else:
+            root_logger.info('no activation history')
+
+    def get_staging_version(self, session, root_logger, cloudlet_object, policy_id) -> int:
+        """Fetch staging version"""
+        _, _, _, resp = self.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=policy_id)
+
+        if resp['activations']:
+            for each in resp['activations']:
+                if each['network'] == 'staging':
+                    if each['policyInfo']['status'] == 'active':
+                        return each['policyInfo']['version']
+        else:
+            root_logger.info('no activation history')
 
     def check_group_input(self, root_logger,
                                 group_name: str | None = None,
@@ -343,6 +369,67 @@ class Utility:
             worksheet.freeze_panes(1, 2)
             worksheet.autofit()
         writer.close()
+
+    def convert_df_float_to_int(self, value):
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return ''
+
+    def convert_datetime_format(self, datetime_str):
+        original_datetime = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        formatted_datetime = original_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        return formatted_datetime
+
+    def alb_active_version(self, session, cloudlet_object, root_logger, origin_id: str, request_version: str) -> int:
+        resp = cloudlet_object.list_load_balancing_config_activation(session, origin_id)
+        response = resp.json()
+        version = None
+        if resp.status_code == 200 and len(response) > 0:
+            if request_version == 'latest':
+                version = max(item['version'] for item in response)
+            else:
+                try:
+                    version = [each['version'] for each in response if each['network'] == f'{request_version.upper()}' and each['status'] == 'active']
+                except:
+                    print_json(data=response)
+                    root_logger.info(f'{origin_id:<40} no activation found on {request_version.upper()} network')
+
+        if version is None:
+            try:
+                return max(item['version'] for item in response)
+            except:
+                root_logger.info(f'{origin_id:<40} no activation found {resp.status_code}')
+                # print_json(data=response)
+        elif isinstance(version, int):
+            version = max(item['version'] for item in response)
+            return version
+        elif isinstance(version, list) and len(version) == 0:
+            root_logger.info(f'{origin_id:<40} no activation found on {request_version.upper()} network')
+        else:
+            if isinstance(version, int):
+                return version
+            if isinstance(version, list):
+                if len(version) > 0:
+                    return version[0]
+
+    def fetch_data_centers(self, session, cloudlet_object, row):
+        response = cloudlet_object.get_load_balancing_version(session, row['loadbalance'], int(row['version'])).json()
+        return response['dataCenters']
+
+    def extract_loadbalaner_fields(self, datacenter_list):
+        result = []
+        if datacenter_list is not None:
+            for dc in datacenter_list:
+                if dc is not None:
+                    dc_dict = {
+                        'hostname': dc.get('hostname'),
+                        'originId': dc.get('originId'),
+                        'percent': dc.get('percent')
+                    }
+                    if any(dc_dict.values()):  # Check if at least one value is not None
+                        result.append(dc_dict)
+        return result
 
 
 class PythonLiteralOption(click.Option):

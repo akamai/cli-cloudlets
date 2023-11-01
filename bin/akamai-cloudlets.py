@@ -45,7 +45,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.1.1'
+PACKAGE_VERSION = '1.1.2'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -166,10 +166,13 @@ def cloudlets(config):
 @click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
 @click.option('--cloudlet-type', metavar='', help='Abbreviation code for cloudlet type', required=False)
 @click.option('--name-contains', metavar='', help='String to use for searching for policies by name', required=False)
+@click.option('--sortby', metavar='', help='Sort by column name',
+              type=click.Choice(['id', 'name', 'type', 'lastmodified'], case_sensitive=True),
+              required=False)
 @pass_config
-def list(config, optjson, optcsv, cloudlet_type, name_contains):
+def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
     '''
-    List all cloudlet policies. Result is sorted by policy name
+    List all cloudlet policies.
     '''
     base_url, session = init_config(config.edgerc, config.section)
 
@@ -199,18 +202,38 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
         policy_df = pd.DataFrame(policies_data)
         policy_df['Shared Policy'] = pd.Series(dtype='str')
         policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
+        policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
+        policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
 
     shared_policies = cloudlet_object.list_shared_policies(session)
+
     shared_df = pd.DataFrame(shared_policies)
-    shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name', 'cloudletType': 'Type', 'groupId': 'Group ID'}, inplace=True)
+    shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name',
+                              'cloudletType': 'Type',
+                              'groupId': 'Group ID'}, inplace=True)
+    shared_df['lastModifiedDate'] = shared_df['modifiedDate'].apply(utility_object.convert_datetime_format)
     shared_df['Shared Policy'] = '* shared'
 
     df = pd.DataFrame()
     if not policy_df.empty or not shared_df.empty:
         df = pd.concat([policy_df, shared_df], ignore_index=True)
         df.fillna('', inplace=True)
-        df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy']]
-        df.sort_values('Policy Name', inplace=True, key=lambda col: col.str.lower())
+        df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate']]
+        if sortby is None:
+            df.sort_values(by=['Policy Name'], inplace=True, key=lambda col: col.str.lower())
+        else:
+            if sortby == 'name':
+                sort_by = 'Policy Name'
+                df.sort_values(sort_by, inplace=True, key=lambda col: col.str.lower())
+            elif sortby == 'lastmodified':
+                sort_by = 'lastModifiedDate'
+                df = df.sort_values(sort_by, ascending=False)
+            else:
+                if sortby == 'type':
+                    sort_by = 'Type'
+                if sortby == 'id':
+                    sort_by = 'Policy ID'
+                df = df.sort_values(sort_by, ascending=True)
         df.reset_index(drop=True, inplace=True)
 
     if name_contains and not df.empty:  # check whether user passed a filter
@@ -226,16 +249,26 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains):
             print_json(df.to_json(orient='records'))
     elif optcsv:
         if not df.empty:
-            df.to_csv('temp_output.csv', header=True, index=None, sep=',', mode='w')
-            with open('temp_output.csv') as f:
+            if cloudlet_type is None:
+                filepath = 'policy.csv'
+            else:
+                filepath = f'policy_{cloudlet_type}.csv'
+            df.to_csv(filepath, header=True, index=None, sep=',', mode='w')
+            with open(filepath) as f:
                 for line in f:
                     print(line.rstrip())
-            os.remove('temp_output.csv')
     else:
         if not df.empty:
             print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
 
     root_logger.info(f'{len(df.index)} policies found')
+
+    if optcsv:
+        print()
+        msg = ''
+        if cloudlet_type == 'ALB':
+            msg = 'You can use this as an input for alb-download command'
+        root_logger.info(f'Output file saved - {filepath:<20} {msg}')
 
 
 @cli.command(short_help='Retrieve policy detail version')
@@ -447,6 +480,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                             sheet2 = pd.DataFrame()
                         else:
                             sheet1 = original_df[columns]
+                            sheet1 = sheet1.fillna('')
                             root_logger.info(tabulate(sheet1, headers='keys', tablefmt='psql', showindex=True, numalign='center'))
 
                             print()
@@ -1043,6 +1077,334 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
         print(f"Description:           {response.json()['description']}")
         if 'additionalDescription' in response.json().keys():
             print(f"AdditionalDescription: {response.json()['additionalDescription']}")
+
+
+@cli.command(short_help='ALB - lookup origins from a single ALB policy')
+@click.option('--type', metavar='', help='filter specific type.  Options: "alb", "ns", "customer"',
+              default='alb',
+              type=click.Choice(['alb', 'ns', 'customer']), required=False)
+@click.option('--list', metavar='', help='list all load balancer', is_flag=True, required=False)
+@click.option('--name-contains', metavar='', help='String to use for searching for load balance (case insensitive)', required=False)
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=False)
+@click.option('--version', metavar='', help='load balance version', required=False)
+@click.option('--json', 'optjson', metavar='', help='Output the load balancing details in json format', is_flag=True, required=False)
+@pass_config
+def alb_origin(config, type, name_contains, list, loadbalance, version, optjson):
+    """
+    Lists the Application Load Balancer origins/data centers
+    """
+
+    if name_contains and list is False:
+        sys.exit(root_logger.info('missing --list argument'))
+
+    if type != 'alb' and list is False:
+        sys.exit(root_logger.info('missing --list argument'))
+
+    if type == 'alb':
+        type = 'APPLICATION_LOAD_BALANCER'
+    elif type == 'ns':
+        type = 'NETSTORAGE'
+    elif type == 'customer':
+        type = 'CUSTOMER'
+    else:
+        type = None
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    lookup_resp = cloudlet_object.list_alb_conditional_origin(session, type)
+
+    if list:
+        # if optjson:
+        #    print_json(data=lookup_resp.json())
+        df = pd.DataFrame(lookup_resp.json())
+        df = df.rename(columns={'originId': 'Load Balancing ID'})
+        if name_contains and not df.empty:
+            df = df[df['Load Balancing ID'].str.contains(name_contains, case=False)]
+
+        df = df.sort_values(by='Load Balancing ID', key=lambda col: col.str.lower())
+        df = df.fillna('')
+        df = df.reset_index(drop=True)
+        if not df.empty:
+            del df['akamaized']
+            del df['checksum']
+            root_logger.info(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        else:
+            root_logger.info('not found')
+
+    if loadbalance and version is None:
+        if type != 'APPLICATION_LOAD_BALANCER':
+            sys.exit(root_logger.info('Search only works with "ALB" type'))
+        lookup_resp = cloudlet_object.list_load_balancing_version(session, loadbalance)
+        if len(lookup_resp.json()) == 0:
+            sys.exit(f'{loadbalance} not found')
+        else:
+            version_df = pd.DataFrame(lookup_resp.json())
+            version_df = version_df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
+                                                    'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
+                                                    'description': 'Version Notes'})
+            version_columns = ['Load Balancing ID', 'version', 'deleted', 'lock', 'createdBy', 'createdDate', 'Last Editor', 'Last Modified']
+            version_df = version_df.fillna('')
+            if 'Version Notes' in version_df.columns:
+                version_columns.insert(2, 'Version Notes')
+
+        activation_resp = cloudlet_object.list_load_balancing_config_activation(session, loadbalance)
+        activation_df = pd.DataFrame()
+        if activation_resp.status_code == 200:
+            if len(activation_resp.json()) == 0:
+                root_logger.info('\nno activation history')
+            else:
+                df = pd.DataFrame(activation_resp.json())
+                df = df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
+                                        'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
+                                        'description': 'Version Notes'})
+                activation_df = df.pivot(index=['Load Balancing ID', 'version'], columns='network', values='status').reset_index()
+                activation_df = activation_df.fillna('')
+                activation_df = activation_df.sort_values(by='version', ascending=False)
+                activation_df = activation_df.reset_index(drop=True)
+
+        if not activation_df.empty:
+            merged_df = pd.merge(version_df, activation_df, on=['Load Balancing ID', 'version'], how='left')
+            merged_df = merged_df.fillna('')
+            columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'deleted']
+            if 'Version Notes' in merged_df.columns:
+                columns.insert(5, 'Version Notes')
+            if 'STAGING' in merged_df.columns:
+                columns.insert(6, 'STAGING')
+            if 'PRODUCTION' in merged_df.columns:
+                columns.insert(6, 'PRODUCTION')
+            root_logger.info(tabulate(merged_df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
+        else:
+            root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
+
+    if loadbalance and version:
+        version_resp = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
+
+        if version_resp.status_code != 200:
+            root_logger.info(version_resp.json()['detail'])
+
+            lookup_resp = cloudlet_object.list_load_balancing_version(session, loadbalance)
+            df = pd.DataFrame(lookup_resp.json())
+            df = df.rename(columns={'originId': 'Load Balancing ID'})
+            columns = ['Load Balancing ID', 'version', 'deleted', 'immutable', 'createdBy', 'createdDate', 'lastModifiedBy', 'lastModifiedDate']
+            df = df.fillna('')
+            if 'description' in df.columns:
+                columns.insert(2, 'description')
+
+            root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True, maxcolwidths=30))
+            sys.exit()
+
+        if isinstance(version_resp.json(), dict):
+            data = version_resp.json()
+            if 'livenessSettings' in data.keys():
+                data.pop('livenessSettings')
+            df = pd.DataFrame.from_dict(data)
+            df = df.rename(columns={'originId': 'Load Balancing ID'})
+        elif isinstance(version_resp.json(), list):
+            df = pd.DataFrame(version_resp.json())
+        else:
+            pass
+
+        if optjson:
+            print_json(data=version_resp.json())
+        else:
+            sections = []
+            sections.append(['Load Balancing ID', 'version', 'deleted', 'immutable',
+                             'createdBy', 'createdDate', 'lastModifiedBy', 'lastModifiedDate'])
+            sections.append(['dataCenters'])
+            sections.append(['livenessSettings'])
+            sections.append(['warnings'])
+            for section in sections:
+                print()
+                if len(section) == 1:
+                    if section[0] == 'livenessSettings':
+                        if 'livenessSettings' in version_resp.json().keys():
+                            print(section[0])
+                            live = version_resp.json()['livenessSettings']
+                            # print_json(data=live)
+                            live_df = pd.DataFrame([live])
+                            root_logger.info(tabulate(live_df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+                    try:
+                        section_data = pd.json_normalize(df[section[0]])
+                        columns = section_data.columns.tolist()
+                        if section[0] == 'dataCenters':
+                            print(section[0])
+                            section_data = section_data.rename(columns={'originId': 'Data Center'})
+                            datacenter_columns = ['Data Center', 'percent', 'city',
+                                                  'cloudServerHostHeaderOverride', 'cloudService',
+                                                  'continent', 'country', 'hostname', 'latitude', 'longitude']
+                            if 'livenessHosts' in section_data.columns:
+                                columns.remove('livenessHosts')
+                                root_logger.info(tabulate(section_data[datacenter_columns], headers=datacenter_columns, numalign='center', tablefmt='psql', showindex=False))
+                                print()
+                                root_logger.info('livenessHosts')
+                                root_logger.info(tabulate(section_data['livenessHosts'], numalign='center', tablefmt='psql', showindex=False))
+                            else:
+                                root_logger.info(tabulate(section_data[datacenter_columns], headers=datacenter_columns, numalign='center', tablefmt='psql', showindex=False))
+                        else:
+                            print(section[0])
+                            root_logger.info(tabulate(section_data, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+                    except KeyError:
+                        pass
+                else:
+                    try:
+                        if 'description' in df.columns:
+                            section.insert(3, 'description')
+                        if 'balancingType' in df.columns:
+                            section.insert(3, 'balancingType')
+                        root_logger.info(tabulate(df[section], headers=section, numalign='center', tablefmt='psql', showindex=False))
+                    except:
+                        root_logger.info(tabulate(df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+
+
+@cli.command(short_help='ALB - Update load balancing description')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--descr', metavar='', help='description', required=True)
+@pass_config
+def alb_update(config, loadbalance, descr):
+    """
+    Update load balancing description
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr)
+    if response.status_code == 200:
+        msg = f"Update load balancing '{response.json()['originId']}'"
+        msg = f"{msg} description to '{response.json()['description']}' succesfully"
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
+
+
+@cli.command(short_help='Remove policy')
+@click.option('--policy-id', metavar='', help='policyId', required=False)
+@click.option('--input', metavar='', help='csv input file contains policyID per line without header', required=False)
+@pass_config
+def delete_policy(config, policy_id, input):
+    """
+    Delete cloudlet policy
+    """
+    if policy_id and input:
+        sys.exit(root_logger.info('Please use either policy-id or input, not both'))
+
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    if policy_id:
+        response_msg = cloudlet_object.delete_policy(session, policy_id)
+        root_logger.info(response_msg)
+
+    if input:
+        df = pd.read_csv(input, names=['id'])
+        df['delete_message'] = df['id'].apply(lambda id: cloudlet_object.delete_policy(session, id))
+
+        df = df.rename(columns={'id': 'Policy ID'})
+        root_logger.info(tabulate(df, headers='keys', tablefmt='psql', numalign='center'))
+
+
+@cli.command(short_help='ALB - download all origins/data centers')
+@click.option('--input', metavar='', help='csv input file', required=True)
+@click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
+@pass_config
+def alb_download(config, input, optcsv):
+    """ Retrieve all data centers from ALB policy based on an input CSV file.\n
+        This only pulls ALB policies with activation history
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    utility_object = Utility()
+
+    df = pd.read_csv(input, names=['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate'], skiprows=1)
+    df['version'] = df['Policy ID'].apply(lambda x: utility_object.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=x)[3]['activations'])
+
+    nohistory = df.query('version.str.len() == 0')
+    nohistory = nohistory.fillna('')
+    nohistory = nohistory.reset_index(drop=True)
+    if not nohistory.empty:
+        root_logger.info('\nALB policy without activation history')
+        del nohistory['version']
+        root_logger.info(tabulate(nohistory, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+
+    df = df.query('version.str.len() > 0')
+    df = df.fillna('')
+    df = df.reset_index(drop=True)
+
+    df['LATEST'] = df['Policy ID'].apply(lambda x: utility_object.get_latest_version(session, cloudlet_object, x, root_logger))
+    df['PRODUCTION'] = df['Policy ID'].apply(lambda x: utility_object.get_production_version(session, root_logger, cloudlet_object, policy_id=x))
+    df['STAGING'] = df['Policy ID'].apply(lambda x: utility_object.get_staging_version(session, root_logger, cloudlet_object, policy_id=x))
+    df['PRODUCTION'] = df['PRODUCTION'].apply(utility_object.convert_df_float_to_int)
+    df['STAGING'] = df['STAGING'].apply(utility_object.convert_df_float_to_int)
+    df['albMatchRule'] = df.apply(lambda row: cloudlet_object.get_policy_version(session, policy_id=row['Policy ID'], version=row['PRODUCTION']
+                                                                                 if row['PRODUCTION'] else row['STAGING']).json()['matchRules'], axis=1)
+    df['loadbalance'] = df['albMatchRule'].apply(lambda x: [rule['forwardSettings']['originId']
+                                                            for rule in x if x is not None] if x else [])
+    df = df.query('loadbalance.str.len() > 0')
+    df = df.fillna('')
+    df = df.reset_index(drop=True)
+    del df['albMatchRule']
+    del df['version']
+    df['loadbalance'] = df['loadbalance'].apply(lambda x: set(x))
+    df['loadbalance'] = df['loadbalance'].apply(lambda x: sorted(x))
+    df = df.rename(columns={'loadbalance': 'Load Balancing ID'})
+    combined_all_lbs = sorted(df['Load Balancing ID'].explode().tolist())
+    alb_df = pd.DataFrame(combined_all_lbs, columns=['Load Balancing ID'])
+
+    if optcsv:
+        file = 'alb_policy_with_lb.csv'
+        df.to_csv(file, header=True, index=None, sep=',', mode='w')
+        root_logger.info(f'\nOutput file saved - {file}')
+        file = 'lb.csv'
+        alb_df.to_csv(file, header=True, index=None, sep=',', mode='w')
+        root_logger.info(f'Output file saved - {file:<30}  You can use this file as an input for alb-origin-bulk command.')
+    else:
+        columns = ['Policy ID', 'Policy Name', 'Shared Policy', 'LATEST', 'STAGING', 'PRODUCTION', 'Load Balancing ID']
+        root_logger.info('\nALB policy with activation history')
+        root_logger.info(tabulate(df[columns], headers=columns, tablefmt='psql', numalign='center', showindex=True, maxcolwidths=70))
+        root_logger.info('\nAll load balancing IDs')
+        root_logger.info(tabulate(alb_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+
+
+@cli.command(short_help='ALB - lookup origins from multiple ALB policies')
+@click.option('--input', metavar='', help='csv input file', required=True)
+@click.option('--version', metavar='', help='Fetch version.  Options = ["production", "staging", "latest"]',
+              type=click.Choice(['production', 'staging', 'latest']), multiple=False, required=True)
+@click.option('--csv', 'optcsv', metavar='', help='Output the policy details in csv format', is_flag=True, required=False)
+@pass_config
+def alb_origin_bulk(config, input, version, optcsv):
+    """Lookup origins from multiple ALB policies\n
+       You can retrieve a list of all load balancing IDs from alb-download command.
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    utility_object = Utility()
+    df = pd.read_csv(input, names=['loadbalance'], skiprows=1)
+
+    df['version'] = df['loadbalance'].apply(lambda x: utility_object.alb_active_version(session, cloudlet_object, root_logger, x, version))
+    df = df.query('version.notna()')
+    df = df.sort_values(by='version', ascending=False)
+    df = df.reset_index(drop=True)
+    root_logger.debug(tabulate(df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+
+    df['dataCenters'] = df.apply(lambda row: utility_object.fetch_data_centers(session, cloudlet_object, row), axis=1)
+    df_exploded = pd.json_normalize(df['dataCenters'])
+    df_exploded['dataCenter'] = df_exploded.apply(utility_object.extract_loadbalaner_fields, axis=1)
+    df_exploded = df_exploded.reset_index(drop=True)
+    df_normalized_datacenter = pd.json_normalize(df_exploded['dataCenter'])
+    df = df.drop(['dataCenters'], axis=1)
+
+    # rebuild column name based on number of datacenters
+    num_datacenters = len(df_normalized_datacenter.columns)
+    new_columns = [f'datacenter_{i+1}' for i in range(num_datacenters)]
+    df_normalized_datacenter.columns = new_columns
+    result_df = pd.concat([df, df_normalized_datacenter], axis=1)
+    result_df = result_df.rename(columns={'loadbalance': 'Load Balancing ID'})
+    root_logger.info(tabulate(result_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+    if optcsv:
+        file = 'alb_origin_detail.csv'
+        result_df.to_csv(file, index=False)
+        root_logger.info(f'Output file saved - {file}')
 
 
 def get_prog_name():

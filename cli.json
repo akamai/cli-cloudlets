@@ -5,8 +5,10 @@
   "commands": [
     {
       "name": "cloudlets",
-      "aliases": ["cloudlets"],
-      "version": "1.1.1",
+      "aliases": [
+        "cloudlets"
+      ],
+      "version": "1.1.2",
       "description": "Manage Akamai Cloudlets"
     }
   ]

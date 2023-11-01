@@ -73,8 +73,13 @@ Main program file that wraps this functionality in a command line utility:
 - [update](#update)
 - [clone](#clone)
 - [create-policy](#create-policy)
+- [delete-policy](#delete-policy)
 - [activate](#activate)
 - [activation-status](#activation-status)
+- [alb-download](#alb-download)
+- [alb-origin](#alb-origin)
+- [alb-origin-bulk](#alb-origin-bulk)
+- [alb-update](#alb-update)
 
 ## Global Flags
 
@@ -97,7 +102,7 @@ Display cloudlet policy types available for the account. Display name, code, and
 
 ### list
 
-List all cloudlet policies. Result is sorted by policy name (case insensitive)
+List all cloudlet policies.
 Also search by --name-contains or --cloudlet-type (optional)
 Output can be piped to json or csv format (optional)
 
@@ -105,6 +110,7 @@ Output can be piped to json or csv format (optional)
 %  akamai cloudlets list
 %  akamai cloudlets list --name-contains namestring
 %  akamai cloudlets list --cloudlet-type ER
+%  akamai cloudlets list --cloudlet-type ER --sortby lastmodified
 %  akamai cloudlets list --name-contains namestring --cloudlet-type ALB
 %  akamai cloudlets list --json
 %  akamai cloudlets list --csv > sample.csv
@@ -117,6 +123,7 @@ Argument Details:
   --csv             Output the policy details in csv format
   --cloudlet-type   Abbreviation code for cloudlet type
   --name-contains   String to use for searching for policies by name
+  --sortby          Sort by column name
 ```
 
 ### policy-endpoint
@@ -251,6 +258,22 @@ Argument Details:
   --notes           Policy Notes [optional]
 ```
 
+### delete-policy
+
+Remove a cloudlet policy
+
+```xml
+%  akamai cloudlets delete-policy --policy-id 12345
+%  akamai cloudlets delete-policy --input remove_list.csv
+```
+
+Argument Details:
+
+```xml
+  --policy-id   policyId
+  --input       csv input file contains policyId per line without header
+```
+
 ### activate
 
 Activate a cloudlet policy version to Akamai staging or production network.
@@ -289,6 +312,88 @@ Argument Details:
   --network     Akamai network (staging or production)
 ```
 
+### alb-download
+
+Retrieve all data centers from ALB policy based on an input CSV file. This only pulls ALB policies with data centers
+
+```xml
+%  akamai cloudlets alb-download --input policy_ALB.csv
+%  akamai cloudlets alb-download --input policy_ALB.csv --csv
+```
+
+Argument Details:
+
+```xml
+  --input     csv input file  [required]
+  --csv       Output the policy details in csv format
+```
+
+### alb-origin
+
+Lists the Application Load Balancer origins/data centers with activation history
+
+```xml
+%  akamai cloudlets alb-origin --list
+%  akamai cloudlets alb-origin --list --name-contains booking
+%  akamai cloudlets alb-origin --list --name-contains booking --lb myBooking
+%  akamai cloudlets alb-origin --list --name-contains booking --lb myBooking --version 3
+%  akamai cloudlets alb-origin --list --name-contains booking --lb myBooking --version 3 --json
+%  akamai cloudlets alb-origin --lb myBooking
+%  akamai cloudlets alb-origin --lb myBooking --version 3
+```
+
+Argument Details:
+
+```xml
+  --type            filter specific type.  Options: "alb", "ns", "customer"
+  --list            list all load balancers
+  --name-contains   String to use for searching for load balance (case insensitive)
+  --lb              load balancing name (case sensitive, require exact name match)
+  --version         load balance version
+  --json            Output the load balancing details in json format
+```
+
+### alb-origin-bulk
+
+Lookup origins from multiple ALB policies. You can retrieve a list of all load balancing IDs from alb-download command.
+
+```xml
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version production
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version staging
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version latest
+%  akamai cloudlets alb-origin-bulk --input lb.csv --version latest --csv
+```
+
+Argument Details:
+
+```xml
+  --input     csv input file  [required]
+  --version   Fetch version.  Options = ["production", "staging", "latest"] [required]
+  --csv       Output the policy details in csv format
+```
+
+You can run these commands to help get the input file needed for `alb-origin-bulk` command.
+
+1. Get a list of ALB policies `akamai cloudlets list --cloudlet-type ALB --csv`
+2. Get a list of associated load balancing ID `akamai cloudlets alb-download --input policy_alb.csv --csv`
+3. Collect origins/data centers for those load balancing IDs `akamai cloudlets alb-origin-bulk --input lb.csv --csv`
+
+### alb-update
+
+Update load balancing description
+
+```xml
+%  akamai cloudlets alb-update --lb sample --descr "ok to delete"
+%  akamai cloudlets alb-update --lb sample --descr "udpate via cli"
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match) [required]
+  --descr     description  [required]
+```
+
 # Contribution
 
 By submitting a contribution (the “Contribution”) to this project, and for good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, you (the “Assignor”) irrevocably convey, transfer, and assign the Contribution to the owner of the repository (the “Assignee”), and the Assignee hereby accepts, all of your right, title, and interest in and to the Contribution along with all associated copyrights, copyright registrations, and/or applications for registration and all issuances, extensions and renewals thereof (collectively, the “Assigned Copyrights”). You also assign all of your rights of any kind whatsoever accruing under the Assigned Copyrights provided by applicable law of any jurisdiction, by international treaties and conventions and otherwise throughout the world.
@@ -296,10 +401,12 @@ By submitting a contribution (the “Contribution”) to this project, and for g
 ## Local Install
 
 - Minimum python 3.6 `git clone https://github.com/akamai/cli-cloudlets.git`
-- cd into cli-cloudlets directory `cd cli-onboard`
+- cd into cli-cloudlets directory `cd cli-cloudlets`
+- Create python virtual environment `python3 -m venv .venv`
+- Activate local virtual environment `source .venv/bin/activate`
 - Create python virtual environment `python3 -m venv .venv`
 - Install required packages `pip3 install -r requirements.txt`
-- If testing another branch run, for example, `git checkout -b shared-policy`
+- If testing another branch run, for example, `git checkout -b {new_branch_name}`
 - Run as Akamai CLI, first uninstall `akamai uninstall cloudlets`
 - Run `pwd` to get current directory i.e `/Users/Documents/cli-onboard`
 - Install from local repo
