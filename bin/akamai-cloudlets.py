@@ -116,11 +116,20 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Cloudlets 1.1.1
+    Akamai CLI for Cloudlets 1.1.2
     '''
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
+
+
+@cli.command()
+@click.pass_context
+def help(ctx):
+    '''
+    Show help information
+    '''
+    print(ctx.parent.get_help())
 
 
 @cli.command(short_help='List available cloudlets')
