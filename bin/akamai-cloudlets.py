@@ -215,13 +215,15 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
         policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
 
     shared_policies = cloudlet_object.list_shared_policies(session)
-
-    shared_df = pd.DataFrame(shared_policies)
-    shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name',
-                              'cloudletType': 'Type',
-                              'groupId': 'Group ID'}, inplace=True)
-    shared_df['lastModifiedDate'] = shared_df['modifiedDate'].apply(utility_object.convert_datetime_format)
-    shared_df['Shared Policy'] = '* shared'
+    if len(shared_policies) == 0:
+        shared_df = pd.DataFrame()
+    else:
+        shared_df = pd.DataFrame(shared_policies)
+        shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name',
+                                'cloudletType': 'Type',
+                                'groupId': 'Group ID'}, inplace=True)
+        shared_df['lastModifiedDate'] = shared_df['modifiedDate'].apply(utility_object.convert_datetime_format)
+        shared_df['Shared Policy'] = '* shared'
 
     df = pd.DataFrame()
     if not policy_df.empty or not shared_df.empty:
