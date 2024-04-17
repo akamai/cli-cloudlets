@@ -14,6 +14,7 @@ Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
 from __future__ import annotations
 
 import json
+import sys
 
 import pandas as pd
 from rich import print_json
@@ -38,6 +39,7 @@ class Cloudlet:
                 print(f'\nAccount Name: {account_name} {account_id}')
             except:
                 print(f'\nInvalid account key: {account_id}')
+                sys.exit()
 
     def get_groups(self, session):
         cloudlet_group_url = f'https://{self.access_hostname}/cloudlets/api/v2/group-info'
