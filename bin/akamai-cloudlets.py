@@ -45,7 +45,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.1.2'
+PACKAGE_VERSION = '1.1.3'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -116,7 +116,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Cloudlets 1.1.2
+    Akamai CLI for Cloudlets 1.1.3
     '''
     config.edgerc = edgerc
     config.section = section
@@ -206,13 +206,16 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
 
     policies_response = cloudlet_object.list_policies(session)
     policy_df = pd.DataFrame()
-    if policies_response.status_code == 200:
-        policies_data = policies_response.json()
-        policy_df = pd.DataFrame(policies_data)
-        policy_df['Shared Policy'] = pd.Series(dtype='str')
-        policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
-        policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
-        policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+    if not policies_response:
+        root_logger.debug('account does not have non-shared (v2) policy')
+    else:
+        if policies_response.status_code == 200:
+            policies_data = policies_response.json()
+            policy_df = pd.DataFrame(policies_data)
+            policy_df['Shared Policy'] = pd.Series(dtype='str')
+            policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
+            policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
+            policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
 
     shared_policies = cloudlet_object.list_shared_policies(session)
     if len(shared_policies) == 0:
