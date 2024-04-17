@@ -206,16 +206,17 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
 
     policies_response = cloudlet_object.list_policies(session)
     policy_df = pd.DataFrame()
-    if not policies_response:
+    if policies_response is None:
         root_logger.debug('account does not have non-shared (v2) policy')
     else:
-        if policies_response.status_code == 200:
+        if policies_response.ok:
             policies_data = policies_response.json()
-            policy_df = pd.DataFrame(policies_data)
-            policy_df['Shared Policy'] = pd.Series(dtype='str')
-            policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
-            policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
-            policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+            if len(policies_data) > 0:
+                policy_df = pd.DataFrame(policies_data)
+                policy_df['Shared Policy'] = pd.Series(dtype='str')
+                policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
+                policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
+                policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
 
     shared_policies = cloudlet_object.list_shared_policies(session)
     if len(shared_policies) == 0:
