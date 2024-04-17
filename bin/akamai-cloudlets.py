@@ -228,7 +228,7 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
     df = pd.DataFrame()
     if not policy_df.empty or not shared_df.empty:
         df = pd.concat([policy_df, shared_df], ignore_index=True)
-        df.fillna('', inplace=True)
+        df = df.fillna('')
         df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate']]
         if sortby is None:
             df.sort_values(by=['Policy Name'], inplace=True, key=lambda col: col.str.lower())
@@ -371,7 +371,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
         if not df.empty:
             if type == ' ':
                 history_columns = ['version', 'last modified', 'last editor', 'staging', 'production', 'notes']
-                history_df.fillna('', inplace=True)
+                history_df = history_df.fillna('')
                 root_logger.info(tabulate(history_df[history_columns], headers=history_columns, maxcolwidths=60,
                                         tablefmt='psql', showindex=False, numalign='center'))
             else:
@@ -441,7 +441,6 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                 else:
                     original_df['match_type'] = 'matchValue'
 
-                # temp_df.fillna('', inplace=True)
                 type, columns, match_types = utility_object.proces_matchrules_column(original_df)
                 root_logger.info(f'{type=}')
                 print()
@@ -515,7 +514,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                         # --policy-id 161133, 185769, 163388,  163454
                         root_logger.info('...found both matchURL and matches')
                         new_df = original_df
-                        new_df.fillna('', inplace=True)
+                        new_df = new_df.fillna('')
                         del new_df['matches']
                         columns.remove('matches')
 
