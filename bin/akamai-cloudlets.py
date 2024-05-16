@@ -22,12 +22,12 @@ import platform
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from time import gmtime
 from time import strftime
 
 import click
-import numpy as np
 import pandas as pd
 import requests
 from akamai.edgegrid import EdgeGridAuth
@@ -140,34 +140,31 @@ def cloudlets(config):
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
-    policy_df, _ = cloudlet_object.get_schema(session)
-
-    shared_df = cloudlet_object.available_shared_policies(session)
-    if shared_df.empty:
-        if policy_df.empty:
+    policy, _ = cloudlet_object.get_schema(session)
+    shared_policy = cloudlet_object.available_shared_policies(session)
+    column_headers = ['code', 'type', 'policy']
+    if len(shared_policy) == 0:
+        if len(policy) == 0:
             root_logger.info('This account does not have access to any cloudlets')
         else:
-            root_logger.info(tabulate(policy_df, headers='keys', tablefmt='psql', showindex=False))
+            root_logger.info(tabulate(policy, headers=column_headers, tablefmt='github', showindex=False))
     else:
-        shared_df['policy'] = '* shared'
-
-        stack = pd.concat([policy_df, shared_df], axis=0)
-        stack.fillna('', inplace=True)
-        stack.sort_values(by=['code', 'policy'], inplace=True)
-        stack['count'] = stack.groupby('code')['code'].transform('count')
-
-        stack.reset_index(drop=True, inplace=True)
-        stack['name'] = stack['name'].str.replace('_', ' ')
-        stack['name'] = stack['name'].str.title()
-
-        # combine and if code is duplicated, remove cloudlets that are not shared policy
-        df1 = stack[stack['count'] == 1]
-        df2 = stack[stack['policy'] == '* shared']
-        df3 = pd.concat([df1, df2], axis=0)
-        df3.sort_values(by=['code', 'policy'], inplace=True)
-        df3.reset_index(drop=True, inplace=True)
-        columns = ['name', 'code', 'policy']
-        root_logger.info(tabulate(df3[columns], headers='keys', tablefmt='github', showindex=False))
+        policy.extend(shared_policy)
+        sorted_policy = sorted(policy, key=lambda x: x[0])
+        summary = {}
+        for entry in sorted_policy:
+            code = entry[0]
+            name = entry[1].replace('_', ' ')
+            if code in summary:
+                if entry[2] == '* shared':
+                    summary[code] = code, name.title(), entry[2]
+            else:
+                summary[code] = code, name.title(), entry[2]
+        summary_data = []
+        for x in summary.values():
+            summary_data.append(x)
+        print()
+        root_logger.info(tabulate(summary_data, headers=column_headers, tablefmt='github', showindex=False))
 
 
 @cli.command(short_help='List policies')
@@ -187,96 +184,97 @@ def list(config, optjson, optcsv, cloudlet_type, name_contains, sortby):
 
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    utility_object = Utility()
+    utility = Utility()
     cloudlet_type = cloudlet_type
     name_contains = name_contains
     if cloudlet_type:
-        if cloudlet_type.upper() not in utility_object.do_cloudlet_code_map().keys():
+        if cloudlet_type.upper() not in utility.do_cloudlet_code_map().keys():
             root_logger.info(f'ERROR: {cloudlet_type} is not a valid cloudlet type code')
             keys = []
-            for key in utility_object.do_cloudlet_code_map():
+            for key in utility.do_cloudlet_code_map():
                 keys.append(key)
             print(f'Cloudlet Type Codes: {sorted(keys)}')
             exit(-1)
         else:
-            utility_object.do_cloudlet_code_map()[cloudlet_type.upper()]
+            utility.do_cloudlet_code_map()[cloudlet_type.upper()]
             cloudlet_object.get_schema(session, cloudlet_type.upper())
 
     root_logger.info('...fetching policy list')
-
     policies_response = cloudlet_object.list_policies(session)
-    policy_df = pd.DataFrame()
     if policies_response is None:
         root_logger.debug('account does not have non-shared (v2) policy')
     else:
+        policies_data = []
         if policies_response.ok:
-            policies_data = policies_response.json()
-            if len(policies_data) > 0:
-                policy_df = pd.DataFrame(policies_data)
-                policy_df['Shared Policy'] = pd.Series(dtype='str')
-                policy_df.rename(columns={'policyId': 'Policy ID', 'name': 'Policy Name', 'cloudletCode': 'Type', 'groupId': 'Group ID'}, inplace=True)
-                policy_df['lastModifiedDate'] = pd.to_datetime(policy_df['lastModifiedDate'], unit='ms')
-                policy_df['lastModifiedDate'] = policy_df['lastModifiedDate'].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+            data = policies_response.json()
+            if len(data) > 0:
+                for x in data:
+                    dt_str = datetime.fromtimestamp(x['lastModifiedDate'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                    policies_data.append([x['policyId'], x['name'], x['cloudletCode'], x['groupId'], '', dt_str])
 
     shared_policies = cloudlet_object.list_shared_policies(session)
-    if len(shared_policies) == 0:
-        shared_df = pd.DataFrame()
-    else:
-        shared_df = pd.DataFrame(shared_policies)
-        shared_df.rename(columns={'id': 'Policy ID', 'name': 'Policy Name',
-                                'cloudletType': 'Type',
-                                'groupId': 'Group ID'}, inplace=True)
-        shared_df['lastModifiedDate'] = shared_df['modifiedDate'].apply(utility_object.convert_datetime_format)
-        shared_df['Shared Policy'] = '* shared'
+    if len(shared_policies) > 0:
+        shared_policies_data = []
+        for x in shared_policies:
+            dt_object = datetime.strptime(x['modifiedDate'], '%Y-%m-%dT%H:%M:%S.%fZ')
+            dt_str = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+            shared_policies_data.append([x['id'], x['name'], x['cloudletType'], x['groupId'], '* shared', dt_str])
 
-    df = pd.DataFrame()
-    if not policy_df.empty or not shared_df.empty:
-        df = pd.concat([policy_df, shared_df], ignore_index=True)
-        df = df.fillna('')
-        df = df[['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate']]
+    column_headers = ['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastmodified']
+    if not len(policies_data) > 0 or len(shared_policies) > 0:
+        policies_data.extend(shared_policies_data)
         if sortby is None:
-            df.sort_values(by=['Policy Name'], inplace=True, key=lambda col: col.str.lower())
+            policies_data = sorted(policies_data, key=lambda x: x[1].lower())
         else:
             if sortby == 'name':
-                sort_by = 'Policy Name'
-                df.sort_values(sort_by, inplace=True, key=lambda col: col.str.lower())
+                policies_data = sorted(policies_data, key=lambda x: x[1].lower())
             elif sortby == 'lastmodified':
-                sort_by = 'lastModifiedDate'
-                df = df.sort_values(sort_by, ascending=False)
-            else:
-                if sortby == 'type':
-                    sort_by = 'Type'
-                if sortby == 'id':
-                    sort_by = 'Policy ID'
-                df = df.sort_values(sort_by, ascending=True)
-        df.reset_index(drop=True, inplace=True)
+                policies_data = sorted(policies_data, key=lambda x: x[5])
+            elif sortby == 'type':
+                policies_data = sorted(policies_data, key=lambda x: x[2])
+            elif sortby == 'id':
+                policies_data = sorted(policies_data, key=lambda x: x[1])
 
-    if name_contains and not df.empty:  # check whether user passed a filter
-        df = df[df['Policy Name'].str.contains(name_contains, case=False)]
-        df.reset_index(drop=True, inplace=True)
+    if name_contains and len(policies_data) > 0:  # check whether user passed a filter
+        temp = []
+        for item in policies_data:
+            if name_contains.lower() in item[1].lower():
+                temp.append(item)
+        policies_data = temp
 
-    if cloudlet_type and not df.empty:  # only searching by cloudlet type
-        df = df[df['Type'] == cloudlet_type.upper()]
-        df.reset_index(drop=True, inplace=True)
+    if cloudlet_type and len(policies_data) > 0:  # only searching by cloudlet type
+        temp = []
+        for item in policies_data:
+            if cloudlet_type.upper() in item[2]:
+                temp.append(item)
+        policies_data = temp
 
-    if optjson:
-        if not df.empty:
-            print_json(df.to_json(orient='records'))
-    elif optcsv:
-        if not df.empty:
+    if len(policies_data) > 0:
+        if optjson:
+            policies = []
+            for x in policies_data:
+                single_policy = {}
+                single_policy['Policy ID'] = x[0]
+                single_policy['Policy Name'] = x[1]
+                single_policy['Type'] = x[2]
+                single_policy['Group ID'] = x[3]
+                single_policy['Share Policy'] = x[4]
+                single_policy['lastModifiedDate'] = x[5]
+                policies.append(single_policy)
+            print_json(data=policies)
+        elif optcsv:
             if cloudlet_type is None:
                 filepath = 'policy.csv'
             else:
                 filepath = f'policy_{cloudlet_type}.csv'
-            df.to_csv(filepath, header=True, index=None, sep=',', mode='w')
-            with open(filepath) as f:
-                for line in f:
-                    print(line.rstrip())
-    else:
-        if not df.empty:
-            print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
-
-    root_logger.info(f'{len(df.index)} policies found')
+                with open(filepath, 'w', newline='') as csvfile:
+                    csv_writer = csv.writer(csvfile)
+                    csv_writer.writerow(column_headers)
+                    csv_writer.writerows(policies_data)
+        else:
+            print(tabulate(policies_data, headers=column_headers, tablefmt='psql', showindex=False))
+    print()
+    root_logger.info(f'{len(policies_data)} policies found')
 
     if optcsv:
         print()

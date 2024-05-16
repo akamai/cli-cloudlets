@@ -305,34 +305,20 @@ class Cloudlet:
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
         response = session.get(self.form_url(url), headers=headers)
-        if response.status_code == 200:
-            df = pd.DataFrame(response.json())
-            if not df.empty:
-                df.rename(columns={'cloudletName': 'name', 'cloudletCode': 'code'}, inplace=True)
-            else:
-                return pd.DataFrame(), response
-        else:
-            return pd.DataFrame(), response
+        schemas_data = []
+        if response.ok:
+            for x in response.json():
+                schemas_data.append([x['cloudletCode'], x['cloudletName'], ''])
 
-        if cloudlet_type:
+        if template and cloudlet_type:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
             response = session.get(self.form_url(url), headers=headers)
-            schemas_df = pd.DataFrame(response.json()['schemas'])
-            schemas_df.rename(columns={'title': 'action', 'location': 'endpoint'}, inplace=True)
-            df = df[df['code'] == cloudlet_type]
-
-        columns = ['name', 'code']
-        if cloudlet_type:
-            if not schemas_df.empty:
-                columns = ['action', 'endpoint']
-                # no need to display
-                # print(tabulate(schemas_df[columns], headers='keys', showindex=True, tablefmt='psql'))
+            schemas_data = response.json()['schemas']
 
         if template:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
             response = session.get(self.form_url(url), headers=headers)
 
-            # print_json(data= response.json())
             if 'properties' in response.json().keys():
                 print('\n\nFields information')
                 property = response.json()['properties']
@@ -372,18 +358,16 @@ class Cloudlet:
                         print(tabulate(criteria_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=30))
                 except:
                     print('no matchCriteriaType')
-        return df, response
+        return schemas_data, response
 
     def available_shared_policies(self, session) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
         response = session.get(self.form_url(url))
-        if response.status_code == 200:
-            df = pd.DataFrame(data=response.json())
-            if not df.empty:
-                df.rename(columns={'cloudletType': 'code',
-                                    'cloudletName': 'name'}, inplace=True)
-                return df[['name', 'code']]
-        return pd.DataFrame()
+        cloudlets = []
+        if response.ok:
+            for x in response.json():
+                cloudlets.append([x['cloudletType'], x['cloudletName'], '* shared'])
+        return cloudlets
 
     def activate_policy_version(self, session, policy_id, version, network: str, additionalPropertyNames: list | None = None):
         """Function to activate a policy version"""
