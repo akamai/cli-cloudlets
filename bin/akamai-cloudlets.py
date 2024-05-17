@@ -1083,6 +1083,7 @@ def policy_endpoint(config, cloudlet_type, template, optjson):
     if optjson:
         print_json(data=response.json())
     if template:
+        print()
         print(f"Endpoint:              {response.json()['location']}")
         print(f"Version:               {response.json()['version']}")
         print(f"Title:                 {response.json()['title']}")

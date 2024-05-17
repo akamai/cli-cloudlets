@@ -310,52 +310,68 @@ class Cloudlet:
             for x in response.json():
                 schemas_data.append([x['cloudletCode'], x['cloudletName'], ''])
 
-        if template and cloudlet_type:
+        if cloudlet_type:
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas?cloudletType={cloudlet_type}'
             response = session.get(self.form_url(url), headers=headers)
             schemas_data = response.json()['schemas']
+            # print_json(data=schemas_data)
+            print('\nAvailable endpoints')
+            for x in schemas_data:
+                endpoint = x['location'].split('/')[-1].rstrip('.json')
+                print(f'   {endpoint}')
 
         if template:
+            print(f'\nChosen template: {template}')
             url = f'https://{self.access_hostname}/cloudlets/api/v2/schemas/{template}.json'
             response = session.get(self.form_url(url), headers=headers)
+            if response.ok:
+                keys = response.json().keys()
+                columns = []
+                for key in keys:
+                    columns.append(key)
+                columns.insert(0, '')
 
-            if 'properties' in response.json().keys():
-                print('\n\nFields information')
-                property = response.json()['properties']
-                property_df = pd.DataFrame(property)
-                property_df.fillna('', inplace=True)
-                columns = property_df.columns.values.tolist()
-                print(tabulate(property_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=30))
+            if 'properties' in columns:
+                schema = response.json()['properties']
+                rows = [['type'] + [s.get('type', '') for s in schema.values()],
+                        ['pattern'] + [s.get('pattern', '') for s in schema.values()],
+                        ['maxLength'] + [s.get('maxLength', '') for s in schema.values()]]
+                print('\nFields information')
+                print(tabulate(rows, headers=columns, tablefmt='psql', maxcolwidths=30))
 
-            if 'definitions' in response.json().keys():
+            if 'definitions' in columns:
                 try:
                     matchRuleType = response.json()['definitions']['matchRuleType']['properties']
-                    matchrule_df = pd.DataFrame(matchRuleType)
-                    matchrule_df.fillna('', inplace=True)
-                    if not matchrule_df.empty:
-                        print('\n\nmatchRuleType')
-                        columns = matchrule_df.columns.values.tolist()
-                        if len(columns) > 7:
-                            if len(columns) - 7 > 4:
-                                column_1 = columns[:7]
-                                print(tabulate(matchrule_df[column_1], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=40))
-                                column_2 = columns[7:]
-                                print(tabulate(matchrule_df[column_2], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=40))
-                            else:
-                                print(tabulate(matchrule_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=20))
-                        else:
-                            print(tabulate(matchrule_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=10))
+                    keys = matchRuleType.keys()
+                    columns = []
+                    for key in keys:
+                        columns.append(key)
+                    columns.insert(0, '')
+
+                    rows = [['type'] + [s.get('type', '') for s in matchRuleType.values()],
+                            ['maxLength'] + [s.get('maxLength', '') for s in matchRuleType.values()],
+                            ['enum'] + [s.get('enum', '') for s in matchRuleType.values()],
+                            ['minimum'] + [s.get('minimum', '') for s in matchRuleType.values()],
+                            ['items'] + [s.get('items', '') for s in matchRuleType.values()]]
+                    print(tabulate(rows, headers=columns, tablefmt='psql', maxcolwidths=30))
                 except:
                     print('no matchRuleType')
 
                 try:
                     matchCriteriaType = response.json()['definitions']['matchCriteriaType']['properties']
-                    criteria_df = pd.DataFrame(matchCriteriaType)
-                    criteria_df.fillna('', inplace=True)
-                    if not criteria_df.empty:
-                        print('\n\nmatchCriteriaType')
-                        columns = criteria_df.columns.values.tolist()
-                        print(tabulate(criteria_df[columns], headers='keys', showindex=True, tablefmt='psql', maxcolwidths=30))
+                    keys = matchCriteriaType.keys()
+                    columns = []
+                    for key in keys:
+                        columns.append(key)
+                    columns.insert(0, '')
+
+                    print('\n\nmatchCriteriaType')
+                    rows = [['type'] + [s.get('type', '') for s in matchRuleType.values()],
+                            ['minLength'] + [s.get('minLength', '') for s in matchRuleType.values()],
+                            ['maxLength'] + [s.get('maxLength', '') for s in matchRuleType.values()],
+                            ['enum'] + [s.get('enum', '') for s in matchRuleType.values()],
+                            ['$ref'] + [s.get('$ref', '') for s in matchRuleType.values()]]
+                    print(tabulate(rows, headers=columns, tablefmt='psql', maxcolwidths=30))
                 except:
                     print('no matchCriteriaType')
         return schemas_data, response
