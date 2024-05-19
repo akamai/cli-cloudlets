@@ -660,7 +660,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
         found_group = False
         root_logger.info(f'...searching for group: {group_name}')
         group_response = cloudlet_object.get_groups(session)
-        if group_response.status_code == 200:
+        if group_response.ok:
             for every_group in group_response.json():
                 if every_group['groupName'].upper() == group_name.upper():
                     group_id = every_group['groupId']
@@ -692,7 +692,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
         policy_data['description'] = description
         create_response = cloudlet_object.create_clone_policy(session, policy_data)
 
-    if create_response.status_code == 201:
+    if create_response.ok:
         print(f'Policy {create_response.json()["policyId"]} created successfully')
     else:
         root_logger.info('ERROR: Unable to create policy')
@@ -830,7 +830,7 @@ def clone(config, version, policy_id, group_id, new_policy):
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id)
     else:
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id, version=version)
-    if response.status_code == 200:
+    if response.ok:
         print(f'Policy {response.json()["id"]} clone successfully')
     else:
         root_logger.info('ERROR: Unable to clone policy')
@@ -1308,11 +1308,11 @@ def delete_policy(config, policy_id, input):
         root_logger.info(response_msg)
 
     if input:
-        df = pd.read_csv(input, names=['id'])
-        df['delete_message'] = df['id'].apply(lambda id: cloudlet_object.delete_policy(session, id))
-
-        df = df.rename(columns={'id': 'Policy ID'})
-        root_logger.info(tabulate(df, headers='keys', tablefmt='psql', numalign='center'))
+        with open(input, newline='\n') as file:
+            csv_readers = csv.reader(file)
+        for row in csv_readers:
+            response_msg = cloudlet_object.delete_policy(session, row)
+            root_logger.info(response_msg)
 
 
 @cli.command(short_help='ALB - download all origins/data centers')

@@ -180,10 +180,10 @@ class Cloudlet:
                    'policyType': 'SHARED'
                   }
         response = session.post(self.form_url(url), json=payload, headers=headers)
-        if response.status_code == 201:
+        if response.ok:
             policy_id = response.json()['id']
             version_response = self.create_shared_policy_version(session, policy_id, matchRules, notes)
-            if version_response.status_code == 201:
+            if version_response.ok:
                 try:
                     policy_version = version_response.json()['version']
                     return version_response, policy_id, policy_version
@@ -453,7 +453,7 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/api/v2/policies/{policy_id}'
 
         response = session.delete(self.form_url(url))
-        if response.status_code == 204:
+        if response.ok:
             msg = 'remove success'
         else:
             msg = response.json()['errorMessage']
