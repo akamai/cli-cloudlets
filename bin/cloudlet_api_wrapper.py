@@ -100,15 +100,18 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
         response = session.get(self.form_url(url))
 
-        if response.status_code == 200:
+        if response.ok:
             data = response.json()['content']
-            df = pd.DataFrame(data)
-            df.rename(columns={'description': 'version notes',
-                               'immutable': 'lock'}, inplace=True)
-            columns = ['version', 'version notes', 'createdBy', 'modifiedDate', 'lock']
-            df.sort_values(by='version', ascending=False, inplace=True)
             version = response.json()['content'][0]['version']
-            return df[columns], version, response
+            columns = ['description', 'version', 'createdBy', 'createdDate', 'modifiedBy', 'immutable']
+            all_policies = []
+            for record in data:
+                filtered_values = []
+                for key, value in record.items():
+                    if key in columns:
+                        filtered_values.append(value)
+                all_policies.append(filtered_values)
+            return all_policies, version, response
 
     def get_active_properties(self, session, policy_id) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
@@ -244,14 +247,18 @@ class Cloudlet:
         """Function to fetch a cloudlet policy detail"""
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions/{version}'
         policy_version_response = session.get(self.form_url(url))
-        transposed_df = pd.DataFrame()
-        if policy_version_response.status_code == 200:
+        if policy_version_response.ok:
             policy_version = policy_version_response.json()
-            policy = {k: policy_version[k] for k in ('policyId', 'version', 'description', 'modifiedBy', 'modifiedDate')}
-            df = pd.DataFrame.from_dict(policy, orient='index')
-            df.rename(columns={'description': 'notes'}, inplace=True)
-            transposed_df = df.T
-        return transposed_df, policy_version_response
+            policy = {k: policy_version[k] for k in ('description', 'version', 'createdBy', 'createdDate', 'modifiedBy', 'immutable')}
+            policy_data = []
+            filter_value = []
+            for _, value in policy.items():
+                if isinstance(value, int):
+                    filter_value.append(str(value))
+                else:
+                    filter_value.append(value)
+            policy_data.append(filter_value)
+            return policy_data, policy_version_response
 
     def create_clone_policy_version(self, session, policy_id, data=dict(), clone_version: int | None = None):
         """Function to create a policy version"""

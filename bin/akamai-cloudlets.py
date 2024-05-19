@@ -22,6 +22,7 @@ import platform
 import subprocess
 import sys
 import time
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from time import gmtime
@@ -301,13 +302,13 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
     Retrieve policy detail version
     """
     base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_account_name(session, config.account_key)
+    cloudlet = Cloudlet(base_url, config.account_key)
+    cloudlet.get_account_name(session, config.account_key)
     utility_object = Utility()
     utility_object.check_policy_input(root_logger, policy_name=policy, policy_id=policy_id)
     policy_name = policy
-    type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
-                                                               cloudlet_object,
+    policy_type, policy_name, policy_id, policy_info = utility_object.validate_policy_arguments(session, root_logger,
+                                                               cloudlet,
                                                                policy_name=policy_name,
                                                                policy_id=policy_id)
     if not policy_info:
@@ -317,76 +318,75 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
         print()
         root_logger.info(f'Found policy-id {policy_id}, cloudlet policy {policy_name}')
 
-    if type == ' ':
+    if policy_type == ' ':
         if version:
-            response = cloudlet_object.get_policy_version(session, policy_id, version)
+            response = cloudlet.get_policy_version(session, policy_id, version)
         else:
-            response = cloudlet_object.list_policy_versions(session, policy_id)
-            if response.status_code == 200:
-                version = response.json()[0]['version']
-                response = cloudlet_object.get_policy_version(session, policy_id, version)
+            response = cloudlet.list_policy_versions(session, policy_id)
 
-        if response.status_code == 200:
-            df = pd.DataFrame.from_dict(response.json(), orient='index')
-            transposed_df = df.T
-            transposed_df.rename(columns={'description': 'notes', 'lastModifiedBy': 'modifiedBy', 'lastModifiedDate': 'modifiedDate'}, inplace=True)
-            if not transposed_df.empty:
-                transposed_df['modifiedDate'] = pd.to_datetime(transposed_df['modifiedDate'], unit='ms')
-                df = transposed_df
+        # Custom function to extract "status" for "staging" and "production" activations
+        def get_activation_status(activations, version, network):
+            for activation in activations:
+                if activation['policyInfo']['version'] == version and activation['network'] == network:
+                    return activation['policyInfo'].get('status')
+            return None
 
-            history_response = cloudlet_object.list_policy_versions_history(session, policy_id)
+        if response.ok:
+            if version is None:
+                history_response = cloudlet.list_policy_versions_history(session, policy_id)
+                data = history_response.json()
+            else:
+                data = [response.json()]
 
-            # Normalize the JSON data excluding the "activations" field
-            history_df = pd.json_normalize(history_response.json(),
-                                   meta=['policyId', 'version', 'description',
-                                         'lastModifiedBy', 'lastModifiedDate'])
-            history_df = history_df.rename(columns={'description': 'notes',
-                                                    'lastModifiedDate': 'last modified',
-                                                    'lastModifiedBy': 'last editor',
-                                                    'activation_staging': 'staging',
-                                                    'activation_production': 'production'})
+            columns = ['version', 'lastModifiedDate', 'lastModifiedBy', 'description', 'lastModifiedBy']
+            policy_data = []
+            for record in data:
+                filter_value = []
+                policy = {k: record[k] for k in ('version', 'lastModifiedDate', 'lastModifiedBy', 'description')}
+                for key, value in policy.items():
+                    if key == 'lastModifiedDate':
+                        dt_str = datetime.fromtimestamp(value / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                        filter_value.append(dt_str)
+                    elif isinstance(value, int):
+                        filter_value.append(str(value))
+                    else:
+                        filter_value.append(value)
+                policy_data.append(filter_value)
 
-            # Custom function to extract "status" for "staging" and "production" activations
-            def get_activation_status(activations, version, network):
-                for activation in activations:
-                    if activation['policyInfo']['version'] == int(version) and activation['network'] == network:
-                        return activation['policyInfo'].get('status')
-                return None
+            policy_history = []
+            for i, policy in enumerate(data):
+                activations = policy.get('activations')
+                update_policy = deepcopy(policy_data[i])
 
-            history_df['staging'] = history_df.apply(lambda row: get_activation_status(row['activations'], row['version'], 'staging'), axis=1)
-            history_df['production'] = history_df.apply(lambda row: get_activation_status(row['activations'], row['version'], 'prod'), axis=1)
-            history_df.drop(columns=['activations'], inplace=True)
-            columns = ['version', 'notes', 'last editor', 'last modified', 'staging', 'production']
-            history_df['last modified'] = pd.to_datetime(history_df['last modified'], unit='ms')
-
+                if isinstance(activations, str):
+                    update_policy.insert(3, ' ')
+                    update_policy.insert(4, ' ')
+                else:
+                    version = policy.get('version')
+                    staging = get_activation_status(activations, version, 'staging')
+                    production = get_activation_status(activations, version, 'production')
+                    update_policy.insert(3, staging) if staging else update_policy.insert(3, ' ')
+                    update_policy.insert(4, production) if production else update_policy.insert(4, ' ')
+                policy_history.append(update_policy)
     else:  # 'Shared Policy'
         if version:
-            df, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            data, response = cloudlet.get_shared_policy_version(session, policy_id, version)
         else:
             # shared latest version policy
-            df, version, history_response = cloudlet_object.list_shared_policy_versions(session, policy_id)
-            _, response = cloudlet_object.get_shared_policy_version(session, policy_id, version)
+            data, version, history_response = cloudlet.list_shared_policy_versions(session, policy_id)
+            _, response = cloudlet.get_shared_policy_version(session, policy_id, version)
 
     if optjson:
         print_json(data=response.json())
     else:
-        if not df.empty:
-            if type == ' ':
+        if len(data) > 0:
+            if policy_type == ' ':
                 history_columns = ['version', 'last modified', 'last editor', 'staging', 'production', 'notes']
-                history_df = history_df.fillna('')
-                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, maxcolwidths=60,
-                                        tablefmt='psql', showindex=False, numalign='center'))
+                root_logger.info(tabulate(policy_history, headers=history_columns, maxcolwidths=60, tablefmt='psql', numalign='center'))
             else:
-                # df.rename(columns={'description': 'notes'}, inplace=True)
-                # columns = ['policyId', 'version', 'notes', 'modifiedBy', 'modifiedDate']
-                # root_logger.info(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-                history_df = df.copy()
-                history_columns = ['version', 'lock', 'last modified', 'last editor', 'notes']
-                history_df = history_df.rename(columns={'modifiedDate': 'last modified',
-                                                        'createdBy': 'last editor',
-                                                        'version notes': 'notes'})
+                history_columns = ['description', 'version', 'createdBy', 'createdDate', 'modifiedBy', 'lock']
+                root_logger.info(tabulate(data, headers=history_columns, tablefmt='psql'))
 
-                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, tablefmt='psql', showindex=False, numalign='center'))
     # Writing full json from latest version
     json_file = 'policy.json'
     with open(json_file, 'w') as f:
@@ -397,7 +397,6 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
     if only_match_rules:
         matchRules = []
         try:
-            df = response.json()['matchRules']
             for every_match_rule in response.json()['matchRules']:
                 # retrieve only matchRules section and strip out location akaRuleId
                 if every_match_rule['type'] == 'igMatchRule':
@@ -409,7 +408,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                     del every_match_rule['akaRuleId']
                 matchRules.append(every_match_rule)
         except:
-            root_logger.info('ERROR: Unable to retrieve matchRules')
+            root_logger.info('ERROR: Unable to retrieve matchRules, please specify --version')
             exit(-1)
 
         if len(matchRules) == 0:
@@ -417,15 +416,14 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
             root_logger.info('no matchrule found')
             exit(-1)
         else:
-            if optjson:
-                print_json(json.dumps({'matchRules': matchRules}))
+            print_json(json.dumps({'matchRules': matchRules}))
+            # Writing full json
+            json_file = 'policy_matchrules.json'
+            with open(json_file, 'w') as f:
+                json.dump({'matchRules': matchRules}, f, indent=4)
+            root_logger.info(f'matchrules policy json is saved at {json_file}')
 
-                # Writing full json
-                json_file = 'policy_matchrules.json'
-                with open(json_file, 'w') as f:
-                    json.dump({'matchRules': matchRules}, f, indent=4)
-                root_logger.info(f'matchrules policy json is saved at {json_file}')
-
+            '''
             else:
                 original_df = pd.DataFrame.from_records(matchRules)
 
@@ -555,6 +553,8 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                         root_logger.info('--show argument is supported only on Mac OS')
                     else:
                         subprocess.check_call(['open', '-a', 'Microsoft Excel', file_location])
+            '''
+
     return 0
 
 
