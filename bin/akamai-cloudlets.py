@@ -1008,13 +1008,12 @@ def activation_status(config, policy_id, network):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     status_code, response = cloudlet_object.list_policy_activation(session, policy_id, network)
-    df = pd.DataFrame()
+
     if status_code == 200:
         if len(response) == 0:
-            root_logger.info('no activation history')
+            root_logger.info(f'no activation history for policy {policy_id}')
             exit(-1)
         else:
-            df = pd.DataFrame(response)
             if network:
                 if network == 'production':
                     networks = ['prod']
@@ -1023,44 +1022,63 @@ def activation_status(config, policy_id, network):
             else:
                 networks = ['staging', 'prod']
             for network in networks:
-                network_temp_df = df[df['network'] == network]
-                if network_temp_df.empty:
+                results = [x for x in response if x['network'] == network]
+
+                sorted_results = sorted(results, key=lambda x: x['policyInfo']['version'], reverse=True)
+                results = sorted_results
+
+                if len(results) == 0:
+                    print()
                     root_logger.info(f'no activation history on {network} network')
                 else:
-                    policy = network_temp_df['policyInfo'].values.tolist()
-                    policy_df = pd.DataFrame(policy)
-                    if not policy_df.empty:
-                        policy_df['activationDate'] = pd.to_datetime(policy_df['activationDate'], unit='ms')
-                        root_logger.info(f'{network} network')
-                        root_logger.info(tabulate(policy_df, headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-                    '''
-                    property = network_df['propertyInfo'].values.tolist()
-                    property_df = pd.DataFrame(property)
-                    property_df['activationDate'] = pd.to_datetime(property_df['activationDate'], unit='ms')
-                    root_logger.info(tabulate(property_df, headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-                    '''
-    if df.empty:
+                    print()
+                    root_logger.info(f'{network} network')
+                    environment = []
+
+                    prev_version = 0
+                    for result in results:
+                        res = result['policyInfo']
+                        if prev_version == res['version']:
+                            continue
+                        else:
+                            prev_version = res['version']
+                            status_detail = res['status']
+                            activated_by = res['activatedBy']
+                            dt_str = datetime.fromtimestamp(res['activationDate'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                            environment.append([res['policyId'], res['name'], res['version'],
+                                                res['status'], status_detail, activated_by, dt_str])
+
+                    columns = ['policyId', 'name', 'version', 'status', 'statusDetail', 'activatedBy', 'activationDate']
+                    root_logger.info(tabulate(environment, headers=columns, tablefmt='psql', numalign='center'))
+
+    if status_code == 404:
         shared_policy_response = cloudlet_object.get_activation_status(session, policy_id=policy_id)
-        if shared_policy_response.status_code == 200:
+        if not shared_policy_response.ok:
+            root_logger.info(f'no activation history for shared policy id {policy_id}')
+        else:
             try:
-                df = pd.DataFrame(shared_policy_response.json()['content'])
+                data = shared_policy_response.json()['content']
             except:
-                print('no activation history')
+                root_logger.info('shared no activation history')
             if network:
                 networks = [network.upper()]
             else:
                 networks = ['STAGING', 'PRODUCTION']
-            df.rename(columns={'id': 'activationId', 'policyVersion': 'policy version'}, inplace=True)
+
             columns = ['network', 'policy version', 'operation', 'status', 'activationId', 'finishDate', 'createdBy']
             for network in networks:
-                temp_df = df[df['network'] == network.upper()]
-                if not temp_df.empty:
+                results = [x for x in data if x['network'] == network.upper()]
+                if len(results) > 0:
+                    print()
                     root_logger.info(f'Share policy {network} network')
-                    root_logger.info(tabulate(temp_df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+                    environment = []
+                    for res in results:
+                        environment.append([res['network'], res['policyVersion'], res['operation'], res['status'],
+                                            res['id'], res['finishDate'], res['createdBy']])
+                    columns = ['network', 'policy version', 'operation', 'status', 'activationId', 'finishDate', 'createdBy']
+                    root_logger.info(tabulate(environment, headers=columns, tablefmt='psql', numalign='center'))
                 else:
                     root_logger.info(f'no activation history in {network} network')
-        else:
-            root_logger.info('no activation history')
 
 
 @cli.command(short_help='Cloudlet policies API endpoints specification')
