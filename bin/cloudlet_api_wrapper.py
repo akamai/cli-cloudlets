@@ -203,7 +203,7 @@ class Cloudlet:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}'
         headers = {'accept': 'application/problem+json'}
         response = session.delete(self.form_url(url), headers=headers)
-        if response.status_code == 204:
+        if response.ok:
             return True
         else:
             print_json(data=response.json())

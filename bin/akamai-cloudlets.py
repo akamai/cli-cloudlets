@@ -873,10 +873,10 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
         if version:
             update_response = cloudlet_object.update_shared_policy_detail(session, policy_id, version,
                                                                           match_rules=update_json_content)
-            if update_response.status_code == 409:
-                root_logger.info(f"{update_response.json()['errors'][0]['detail']}")
-            elif update_response.status_code == 200:
+            if update_response.ok:
                 root_logger.info(f'Updating policy {policy_name} v{version}')
+            elif update_response.status_code == 409:
+                root_logger.info(f"{update_response.json()['errors'][0]['detail']}")
             else:
                 print_json(data=update_response.json())
                 root_logger.info(f'Not able to update policy {policy_name} v{version}')
@@ -888,12 +888,12 @@ def update(config, group_id, policy_id, policy, notes, version, file, share):
                 else:
                     root_logger.info('only policy description will be updated')
                     response = cloudlet_object.update_shared_policy(session, policy_id, group_id, notes)
-                    if response.status_code == 200:
+                    if response.ok:
                         root_logger.info('policy note is updated')
             else:
                 matchRules = update_json_content['matchRules']
                 version_response = cloudlet_object.create_shared_policy_version(session, policy_id, matchRules, notes)
-                if version_response.status_code == 201:
+                if version_response.ok:
                     version = version_response.json()['version']
                     root_logger.info(f'create a new version {policy_name} v{version}')
                 else:
