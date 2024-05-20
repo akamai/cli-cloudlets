@@ -188,14 +188,12 @@ class Utility:
     def validate_shared_policy_arguments(self, session, root_logger, cloudlet_object,
                                          policy_name: str | None = None,
                                          policy_id: int | None = None) -> tuple:
-
         if policy_name:
             id, policy_info, _ = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy_name)
-            policy_name, policy_info, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
         else:
             id = policy_id
-            policy_name, policy_info, _ = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
-        return policy_name, id, policy_info
+        policy_name, policy_id, policy_info = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
+        return policy_name, policy_id, policy_info
 
     def retrieve_shared_policy(self, session, root_logger, cloudlet_object,
                                policy_name: str | None = None,

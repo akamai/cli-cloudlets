@@ -587,9 +587,10 @@ def status(config, policy_id, policy):
         pass
     else:
         if type == ' ':
-
             # setup a table
-            table = PrettyTable(['Version', 'Network', 'PM Config', 'PM Version'])
+            new_header = f'Policy ID ({policy_id}) version'
+            columns = [new_header, 'network', 'property name', 'property version']
+            combined_data = []
             if len(policy_info['activations']) > 0:
                 for every_policy in policy_info['activations']:
                     table_row = []
@@ -597,25 +598,20 @@ def status(config, policy_id, policy):
                     table_row.append(every_policy['network'])
                     table_row.append(every_policy['propertyInfo']['name'])
                     table_row.append(str(every_policy['propertyInfo']['version']))
-                    table.add_row(table_row)
-                table.align = 'l'
-                print(table)
+                    combined_data.append(table_row)
+                print(tabulate(combined_data, headers=columns, tablefmt='psql', numalign='center'))
             else:
                 print('no active property')
         else:
-
-            df = pd.DataFrame(policy_info)
-            staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
-            production = df.loc[df['network'] == 'production'].iloc[0, 0]
-
-            df = cloudlet_object.get_active_properties(session, policy_id)
-            if not df.empty:
-                df['policy version'] = df.apply(lambda row: utility_object.fill_column(row, staging, production), axis=1)
-
-                new_header = f'Policy ID ({policy_id}) version'
-                df.rename(columns={'policy version': new_header}, inplace=True)
-                columns = [new_header, 'network', 'property name', 'property version']
-                print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
+            properties = cloudlet_object.get_active_properties(session, policy_id)
+            new_header = f'Policy ID ({policy_id}) version'
+            columns = [new_header, 'network', 'property name', 'property version']
+            if len(properties) > 0:
+                combined_data = []
+                for policy, prop in zip(policy_info, properties):
+                    policy.extend(prop[:2])
+                    combined_data.append(policy)
+                print(tabulate(combined_data, headers=columns, tablefmt='psql', numalign='center'))
 
 
 @cli.command(short_help='Create a new policy')

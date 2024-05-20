@@ -64,15 +64,13 @@ class Cloudlet:
     def list_shared_policies_by_name(self, session, policy_name: str) -> tuple:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies'
         response = session.get(self.form_url(url))
-        if response.status_code == 200:
+        if response.ok:
             data = response.json()['content']
-            df = pd.DataFrame(data)
-            df = df[df['name'] == policy_name]
-            if not df.empty:
-                id = df['id'].values[0]
+            policy = [x for x in data if x['name'] == policy_name][0]
+            if policy:
+                id = policy['id']
                 _, policy_info, full_policy_detail = self.list_shared_policies_by_id(session, policy_id=id)
                 return id, policy_info, full_policy_detail
-        return None, None, None
 
     def list_shared_policies_by_id(self, session, policy_id: int) -> tuple:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}'
@@ -80,7 +78,7 @@ class Cloudlet:
         name = None
         policy_info = []
         full_policy_detail = {}
-        if response.status_code == 200:
+        if response.ok:
             full_policy_detail = response.json()
             try:
                 staging = full_policy_detail['currentActivations']['staging']['latest']['policyVersion']
@@ -91,10 +89,9 @@ class Cloudlet:
             except:
                 production = 0
             name = full_policy_detail['name']
-            header = f'Policy ID ({policy_id}) version'
-            policy_info.append({header: staging, 'network': 'staging'})
-            policy_info.append({header: production, 'network': 'production'})
-        return name, policy_info, full_policy_detail
+            policy_info.append([staging, 'staging'])
+            policy_info.append([production, 'production'])
+        return name, policy_id, policy_info
 
     def list_shared_policy_versions(self, session, policy_id: int) -> tuple:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/versions'
@@ -116,19 +113,16 @@ class Cloudlet:
     def get_active_properties(self, session, policy_id) -> pd.DataFrame:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
         response = session.get(self.form_url(url))
-        if response.status_code == 200:
+        if response.ok:
             data = response.json()['content']
             if data:
-                columns = ['network', 'property name', 'property version']
-                df = pd.DataFrame(data)
-                df['network'] = df['network'].apply(str.lower)
-                df.sort_values(by='network', ascending=False, inplace=True)
-                df.rename(columns={'name': 'property name',
-                                   'version': 'property version'}, inplace=True)
-                return df[columns]
+                properties = []
+                for x in data:
+                    properties.append([x['name'], str(x['version']), x['network'].lower()])
+                sorted_properties = sorted(properties, key=lambda item: item[2] != 'staging')
+                return sorted_properties
             else:
                 print('no active property')
-                return pd.DataFrame()
 
     def list_policies_offset(self, session, offset, page_size):
         """ Function to fetch policies from offset and page size"""
