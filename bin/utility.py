@@ -108,7 +108,7 @@ class Utility:
     def get_latest_version(self, session, cloudlet_object, policy_id: int, root_logger):
         """Function to fetch latest version"""
         policy_versions_response = cloudlet_object.list_policy_versions(session, policy_id, page_size=1)
-        if policy_versions_response.status_code == 200:
+        if policy_versions_response.ok:
             # If for some reason, can't find a version
             if len(policy_versions_response.json()) > 0:
                 version = policy_versions_response.json()[0]['version']

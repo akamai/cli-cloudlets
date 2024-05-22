@@ -1351,54 +1351,73 @@ def alb_download(config, input, optcsv):
     cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
 
-    df = pd.read_csv(input, names=['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate'], skiprows=1)
-    df['version'] = df['Policy ID'].apply(lambda x: utility_object.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=x)[3]['activations'])
+    policies = []
+    with open(input, newline='\n') as file:
+        rows = csv.reader(file, delimiter=',')
+        next(rows)  # skip header row
+        for row in rows:
+            policies.append(row)
 
-    nohistory = df.query('version.str.len() == 0')
-    nohistory = nohistory.fillna('')
-    nohistory = nohistory.reset_index(drop=True)
-    if not nohistory.empty:
-        root_logger.info('\nALB policy without activation history')
-        del nohistory['version']
-        root_logger.info(tabulate(nohistory, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+    # print(*policies, sep='\n')
+    policies_output = []
+    lb_list = []
+    for policy in policies:
+        policy_id = policy[0]
+        _, policy_name, _, policy_info = utility_object.validate_policy_arguments(session, root_logger, cloudlet_object, policy_id=policy_id)
 
-    df = df.query('version.str.len() > 0')
-    df = df.fillna('')
-    df = df.reset_index(drop=True)
+        if policy_name is None or len(policy_info['activations']) == 0:
+            policy.extend([' ', ' ', ' ', ' '])
+            policies_output.append(policy)
+            continue
 
-    df['LATEST'] = df['Policy ID'].apply(lambda x: utility_object.get_latest_version(session, cloudlet_object, x, root_logger))
-    df['PRODUCTION'] = df['Policy ID'].apply(lambda x: utility_object.get_production_version(session, root_logger, cloudlet_object, policy_id=x))
-    df['STAGING'] = df['Policy ID'].apply(lambda x: utility_object.get_staging_version(session, root_logger, cloudlet_object, policy_id=x))
-    df['PRODUCTION'] = df['PRODUCTION'].apply(utility_object.convert_df_float_to_int)
-    df['STAGING'] = df['STAGING'].apply(utility_object.convert_df_float_to_int)
-    df['albMatchRule'] = df.apply(lambda row: cloudlet_object.get_policy_version(session, policy_id=row['Policy ID'], version=row['PRODUCTION']
-                                                                                 if row['PRODUCTION'] else row['STAGING']).json()['matchRules'], axis=1)
-    df['loadbalance'] = df['albMatchRule'].apply(lambda x: [rule['forwardSettings']['originId']
-                                                            for rule in x if x is not None] if x else [])
-    df = df.query('loadbalance.str.len() > 0')
-    df = df.fillna('')
-    df = df.reset_index(drop=True)
-    del df['albMatchRule']
-    del df['version']
-    df['loadbalance'] = df['loadbalance'].apply(lambda x: set(x))
-    df['loadbalance'] = df['loadbalance'].apply(lambda x: sorted(x))
-    df = df.rename(columns={'loadbalance': 'Load Balancing ID'})
-    combined_all_lbs = sorted(df['Load Balancing ID'].explode().tolist())
-    alb_df = pd.DataFrame(combined_all_lbs, columns=['Load Balancing ID'])
+        latest = str(utility_object.get_latest_version(session, cloudlet_object, policy_id, root_logger))
+        policy.append(latest) if latest else policy.append(' ')
+
+        staging_version = ' '
+        production_version = ' '
+        for act in policy_info['activations']:
+            if act['network'] == 'staging':
+                staging_version = act['policyInfo']['version']
+            if act['network'] == 'prod':
+                production_version = act['policyInfo']['version']
+
+        activations_version = [str(staging_version), str(production_version)]
+        policy.extend(activations_version)
+
+        if staging_version:
+            albMatchRule = cloudlet_object.get_policy_version(session, policy_id=policy_id, version=staging_version).json()
+        if production_version:
+            albMatchRule = cloudlet_object.get_policy_version(session, policy_id=policy_id, version=production_version).json()
+
+        try:
+            loadbalance = [x['forwardSettings']['originId'] for x in albMatchRule['matchRules']]
+            policy.append(loadbalance)
+            lb_list.extend(loadbalance)
+        except KeyError:
+            loadbalance = []
+
+        policies_output.append(policy)
+
+    columns = ['Policy ID', 'Policy Name', 'Type', 'Group ID', 'Shared Policy', 'lastModifiedDate', 'LATEST', 'STAGING', 'PRODUCTION', 'Load Balancing ID']
+    root_logger.info(tabulate(policies_output, headers=columns, numalign='center', tablefmt='psql', showindex=False))
 
     if optcsv:
         file = 'alb_policy_with_lb.csv'
-        df.to_csv(file, header=True, index=None, sep=',', mode='w')
+        with open(file, mode='w', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow(columns)
+            for row in policies_output:
+                csvwriter.writerow(row)
         root_logger.info(f'\nOutput file saved - {file}')
+
         file = 'lb.csv'
-        alb_df.to_csv(file, header=True, index=None, sep=',', mode='w')
+        columns = ['Load Balancing ID']
+        with open(file, mode='w', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow(columns)
+            for row in lb_list:
+                csvwriter.writerow([row])
         root_logger.info(f'Output file saved - {file:<30}  You can use this file as an input for alb-origin-bulk command.')
-    else:
-        columns = ['Policy ID', 'Policy Name', 'Shared Policy', 'LATEST', 'STAGING', 'PRODUCTION', 'Load Balancing ID']
-        root_logger.info('\nALB policy with activation history')
-        root_logger.info(tabulate(df[columns], headers=columns, tablefmt='psql', numalign='center', showindex=True, maxcolwidths=70))
-        root_logger.info('\nAll load balancing IDs')
-        root_logger.info(tabulate(alb_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
 
 
 @cli.command(short_help='ALB - lookup origins from multiple ALB policies')
