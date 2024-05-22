@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import List
 
 import pandas as pd
 from rich import print_json
@@ -110,7 +111,7 @@ class Cloudlet:
                 all_policies.append(filtered_values)
             return all_policies, version, response
 
-    def get_active_properties(self, session, policy_id) -> pd.DataFrame:
+    def get_active_properties(self, session, policy_id) -> list:
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/properties'
         response = session.get(self.form_url(url))
         if response.ok:
@@ -301,7 +302,7 @@ class Cloudlet:
         response = session.put(self.form_url(url), json=match_rules, headers=headers)
         return response
 
-    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> pd.DataFrame:
+    def get_schema(self, session, cloudlet_type: str | None = None, template: str | None = None) -> tuple:
         headers = {'accept': 'application/json'}
 
         url = f'https://{self.access_hostname}/cloudlets/api/v2/cloudlet-info'
@@ -377,7 +378,7 @@ class Cloudlet:
                     print('no matchCriteriaType')
         return schemas_data, response
 
-    def available_shared_policies(self, session) -> pd.DataFrame:
+    def available_shared_policies(self, session) -> list[str]:
         url = f'https://{self.access_hostname}/cloudlets/v3/cloudlet-info'
         response = session.get(self.form_url(url))
         cloudlets = []
@@ -398,7 +399,7 @@ class Cloudlet:
         response = session.post(self.form_url(url), json=data, headers=headers)
         return response
 
-    def activate_shared_policy(self, session, network: str, policy_id: int, version: int | None = None) -> pd.DataFrame:
+    def activate_shared_policy(self, session, network: str, policy_id: int, version: int | None = None):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations'
         payload = {'network': network,
                    'operation': 'ACTIVATION',
@@ -406,7 +407,6 @@ class Cloudlet:
         headers = {'accept': 'application/json',
                    'content-type': 'application/json'}
         response = session.post(self.form_url(url), json=payload, headers=headers)
-        # print_json(data=response.json())
         return response
 
     def list_policy_activation(self, session, policy_id: int, network: str | None = None):
@@ -426,7 +426,7 @@ class Cloudlet:
         response = session.get(self.form_url(url))
         return response.status_code, response.json()
 
-    def get_activation_status(self, session, policy_id: int) -> pd.DataFrame:
+    def get_activation_status(self, session, policy_id: int):
         url = f'https://{self.access_hostname}/cloudlets/v3/policies/{policy_id}/activations/'
         headers = {'accept': 'application/json'}
         response = session.get(self.form_url(url), headers=headers)
