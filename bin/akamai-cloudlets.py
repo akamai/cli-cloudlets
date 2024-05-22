@@ -1434,32 +1434,57 @@ def alb_origin_bulk(config, input, version, optcsv):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     utility_object = Utility()
-    df = pd.read_csv(input, names=['loadbalance'], skiprows=1)
 
-    df['version'] = df['loadbalance'].apply(lambda x: utility_object.alb_active_version(session, cloudlet_object, root_logger, x, version))
-    df = df.query('version.notna()')
-    df = df.sort_values(by='version', ascending=False)
-    df = df.reset_index(drop=True)
-    root_logger.debug(tabulate(df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
+    lb_list = []
+    lb = {}
+    with open(input, newline='\n') as file:
+        rows = csv.reader(file, delimiter=',')
+        next(rows)  # skip header row
+        for row in rows:
+            lb_name = row[0]
+            lb_version = utility_object.alb_active_version(session, cloudlet_object, root_logger, lb_name, version)
 
-    df['dataCenters'] = df.apply(lambda row: utility_object.fetch_data_centers(session, cloudlet_object, row), axis=1)
-    df_exploded = pd.json_normalize(df['dataCenters'])
-    df_exploded['dataCenter'] = df_exploded.apply(utility_object.extract_loadbalaner_fields, axis=1)
-    df_exploded = df_exploded.reset_index(drop=True)
-    df_normalized_datacenter = pd.json_normalize(df_exploded['dataCenter'])
-    df = df.drop(['dataCenters'], axis=1)
+            dcs = utility_object.fetch_data_centers(session, cloudlet_object, lb_name, lb_version)
 
-    # rebuild column name based on number of datacenters
-    num_datacenters = len(df_normalized_datacenter.columns)
-    new_columns = [f'datacenter_{i+1}' for i in range(num_datacenters)]
-    df_normalized_datacenter.columns = new_columns
-    result_df = pd.concat([df, df_normalized_datacenter], axis=1)
-    result_df = result_df.rename(columns={'loadbalance': 'Load Balancing ID'})
-    root_logger.info(tabulate(result_df, headers='keys', tablefmt='psql', numalign='center', showindex=True))
-    if optcsv:
+            root_logger.debug(f'{lb_name} v{lb_version} {len(dcs)}')
+            lb_list.append([lb_name, lb_version, len(dcs)])
+            lb[lb_name] = dcs
+
+    # print(*lb_list, sep='\n')
+
+    max_dcs = max([x[2]for x in lb_list])
+
+    columns = ['Load Balancing ID', 'version']
+    for i in range(1, max_dcs + 1):
+        columns.append(f'datacenter_{i}')
+
+    lb_term_output = []
+    lb_csv_output = []
+    for row in lb_list:
+        csv_row = deepcopy(row)
+        lb_name = row[0]
+        dcs = lb[lb_name]
+        for dc in dcs:
+            row.append(dc['hostname'])
+            csv_row.append(dc)
+        del row[2]
+        del csv_row[2]
+        lb_term_output.append(row)
+        lb_csv_output.append(csv_row)
+
+    if not optcsv:
+        print()
+        root_logger.info(tabulate(lb_term_output, headers=columns, tablefmt='psql', numalign='center', showindex=True))
+        print()
+        root_logger.info('add --csv to get detail for each datacenter in csv output file')
+    else:
         file = 'alb_origin_detail.csv'
-        result_df.to_csv(file, index=False)
-        root_logger.info(f'Output file saved - {file}')
+        with open(file, mode='w', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow(columns)
+            for row in lb_csv_output:
+                csvwriter.writerow(row)
+        root_logger.info(f'\nOutput file saved - {file}')
 
 
 def get_prog_name():

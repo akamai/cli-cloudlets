@@ -412,8 +412,8 @@ class Utility:
                 if len(version) > 0:
                     return version[0]
 
-    def fetch_data_centers(self, session, cloudlet_object, row):
-        response = cloudlet_object.get_load_balancing_version(session, row['loadbalance'], int(row['version'])).json()
+    def fetch_data_centers(self, session, cloudlet_object, lb_name, lb_version):
+        response = cloudlet_object.get_load_balancing_version(session, lb_name, lb_version).json()
         return response['dataCenters']
 
     def extract_loadbalaner_fields(self, datacenter_list):
