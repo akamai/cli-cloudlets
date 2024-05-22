@@ -29,12 +29,10 @@ from time import gmtime
 from time import strftime
 
 import click
-import pandas as pd
 import requests
 from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
 from cloudlet_api_wrapper import Cloudlet
-from prettytable import PrettyTable
 from rich import print_json
 from tabulate import tabulate
 from utility import PythonLiteralOption

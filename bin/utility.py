@@ -20,13 +20,9 @@ from datetime import datetime
 from typing import List
 
 import click
-import pandas as pd
-from openpyxl import load_workbook
-from pandas.io.formats.excel import ExcelFormatter
 from rich import print_json
 from rich.live import Live
 from rich.table import Table
-from tabulate import tabulate
 
 
 class Utility:
