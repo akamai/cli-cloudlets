@@ -1120,6 +1120,7 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
     """
     Lists the Application Load Balancer origins/data centers
     """
+    util = Utility()
 
     if name_contains and list is False:
         sys.exit(root_logger.info('missing --list argument'))
@@ -1141,20 +1142,22 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
     lookup_resp = cloudlet_object.list_alb_conditional_origin(session, type)
 
     if list:
-        # if optjson:
-        #    print_json(data=lookup_resp.json())
-        df = pd.DataFrame(lookup_resp.json())
-        df = df.rename(columns={'originId': 'Load Balancing ID'})
-        if name_contains and not df.empty:
-            df = df[df['Load Balancing ID'].str.contains(name_contains, case=False)]
-
-        df = df.sort_values(by='Load Balancing ID', key=lambda col: col.str.lower())
-        df = df.fillna('')
-        df = df.reset_index(drop=True)
-        if not df.empty:
-            del df['akamaized']
-            del df['checksum']
-            root_logger.info(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        data = lookup_resp.json()
+        if name_contains and len(data) > 0:
+            filter_data = [x for x in data if name_contains.lower() in x['originId'].lower()]
+        else:
+            filter_data = data
+        if len(filter_data) > 0:
+            result = []
+            for x in filter_data:
+                try:
+                    descr = x['description']
+                except:
+                    descr = ' '
+                result.append([x['originId'], x['type'], descr])
+            columns = ['Load Balancing ID', 'type', 'description']
+            sorted_result = sorted(result, key=lambda x: x[0].lower())
+            root_logger.info(tabulate(sorted_result, headers=columns, tablefmt='psql', showindex=True))
         else:
             root_logger.info('not found')
 
@@ -1162,74 +1165,57 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
         if type != 'APPLICATION_LOAD_BALANCER':
             sys.exit(root_logger.info('Search only works with "ALB" type'))
         lookup_resp = cloudlet_object.list_load_balancing_version(session, loadbalance)
-        if len(lookup_resp.json()) == 0:
+        data = lookup_resp.json()
+        if len(data) == 0:
             sys.exit(f'{loadbalance} not found')
         else:
-            version_df = pd.DataFrame(lookup_resp.json())
-            version_df = version_df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
-                                                    'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
-                                                    'description': 'Version Notes'})
-            version_columns = ['Load Balancing ID', 'version', 'deleted', 'lock', 'createdBy', 'createdDate', 'Last Editor', 'Last Modified']
-            version_df = version_df.fillna('')
-            if 'Version Notes' in version_df.columns:
-                version_columns.insert(2, 'Version Notes')
+            result = []
+            for x in data:
+                try:
+                    descr = x['description']
+                except KeyError:
+                    descr = ' '
+                result.append([x['originId'], x['version'], x['immutable'], x['lastModifiedDate'], x['lastModifiedBy'], descr, x['deleted']])
 
         activation_resp = cloudlet_object.list_load_balancing_config_activation(session, loadbalance)
-        activation_df = pd.DataFrame()
-        if activation_resp.status_code == 200:
-            if len(activation_resp.json()) == 0:
-                root_logger.info('\nno activation history')
-            else:
-                df = pd.DataFrame(activation_resp.json())
-                df = df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
-                                        'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
-                                        'description': 'Version Notes'})
-                activation_df = df.pivot(index=['Load Balancing ID', 'version'], columns='network', values='status').reset_index()
-                activation_df = activation_df.fillna('')
-                activation_df = activation_df.sort_values(by='version', ascending=False)
-                activation_df = activation_df.reset_index(drop=True)
+        activation_data = activation_resp.json()
 
-        if not activation_df.empty:
-            merged_df = pd.merge(version_df, activation_df, on=['Load Balancing ID', 'version'], how='left')
-            merged_df = merged_df.fillna('')
-            columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'deleted']
-            if 'Version Notes' in merged_df.columns:
-                columns.insert(5, 'Version Notes')
-            if 'STAGING' in merged_df.columns:
-                columns.insert(6, 'STAGING')
-            if 'PRODUCTION' in merged_df.columns:
-                columns.insert(6, 'PRODUCTION')
-            root_logger.info(tabulate(merged_df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
+        if activation_resp.ok:
+            if len(activation_data) == 0:
+                root_logger.info('\nno activation history')
+        if len(activation_data) > 0:
+            staging_status = ' '
+            production_status = ' '
+            for x in result:
+                temp_version = x[1]
+                network = [y for y in activation_data if y['version'] == temp_version]
+                if len(network) == 0:
+                    pass
+                elif network[0]['network'] == 'STAGING':
+                    staging_status = network[0]['status']
+                else:
+                    production_status = network[0]['status']
+                x.insert(6, staging_status)
+                x.insert(7, production_status)
+            result_with_activation = result
+
+            columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'Version Notes', 'STAGING', 'PRODUCTION', 'deleted']
+            root_logger.info(tabulate(result_with_activation, headers=columns, numalign='center', tablefmt='psql', showindex=False))
         else:
-            root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
+            version_columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'Version Notes', 'deleted']
+            root_logger.info(tabulate(result, headers=version_columns, numalign='center', tablefmt='psql', maxcolwidths=30))
 
     if loadbalance and version:
         version_resp = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
 
-        if version_resp.status_code != 200:
+        if not version_resp.ok:
             root_logger.info(version_resp.json()['detail'])
-
-            lookup_resp = cloudlet_object.list_load_balancing_version(session, loadbalance)
-            df = pd.DataFrame(lookup_resp.json())
-            df = df.rename(columns={'originId': 'Load Balancing ID'})
-            columns = ['Load Balancing ID', 'version', 'deleted', 'immutable', 'createdBy', 'createdDate', 'lastModifiedBy', 'lastModifiedDate']
-            df = df.fillna('')
-            if 'description' in df.columns:
-                columns.insert(2, 'description')
-
-            root_logger.info(tabulate(df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=True, maxcolwidths=30))
-            sys.exit()
+            exit(-1)
 
         if isinstance(version_resp.json(), dict):
             data = version_resp.json()
             if 'livenessSettings' in data.keys():
                 data.pop('livenessSettings')
-            df = pd.DataFrame.from_dict(data)
-            df = df.rename(columns={'originId': 'Load Balancing ID'})
-        elif isinstance(version_resp.json(), list):
-            df = pd.DataFrame(version_resp.json())
-        else:
-            pass
 
         if optjson:
             print_json(data=version_resp.json())
@@ -1240,47 +1226,70 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
             sections.append(['dataCenters'])
             sections.append(['livenessSettings'])
             sections.append(['warnings'])
+
             for section in sections:
                 print()
+
                 if len(section) == 1:
-                    if section[0] == 'livenessSettings':
+                    sectn = section[0]
+
+                    if sectn == 'dataCenters':
+                        datacenter_columns = ['Data Center', 'percent', 'city',
+                                                'cloudServerHostHeaderOverride', 'cloudService',
+                                                'continent', 'country', 'hostname', 'latitude', 'longitude']
+                        jsonkeys = ['originId', 'percent', 'city', 'cloudServerHostHeaderOverride', 'cloudService', 'continent', 'country', 'hostname', 'latitude', 'longitude']
+                        dc_output = []
+                        lh_output = []
+                        lh = False
+                        for temp_dc in data['dataCenters']:
+                            dc = [temp_dc[k] for k in jsonkeys if k in temp_dc]
+                            str_dc = util.dict_to_list(dc)
+                            dc_output.append(str_dc)
+                            if 'livenessHosts' in temp_dc.keys():
+                                lh_output.append(temp_dc['livenessHosts'])
+                                lh = True
+                        root_logger.info(sectn)
+                        root_logger.info(tabulate(dc_output, headers=datacenter_columns, numalign='center', tablefmt='psql'))
+
+                        if lh:
+                            print()
+                            root_logger.info('livenessHosts')
+                            root_logger.info(tabulate(lh_output, numalign='center', tablefmt='psql', showindex=False))
+
+                    if sectn == 'livenessSettings':
                         if 'livenessSettings' in version_resp.json().keys():
-                            print(section[0])
-                            live = version_resp.json()['livenessSettings']
-                            # print_json(data=live)
-                            live_df = pd.DataFrame([live])
-                            root_logger.info(tabulate(live_df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
-                    try:
-                        section_data = pd.json_normalize(df[section[0]])
-                        columns = section_data.columns.tolist()
-                        if section[0] == 'dataCenters':
-                            print(section[0])
-                            section_data = section_data.rename(columns={'originId': 'Data Center'})
-                            datacenter_columns = ['Data Center', 'percent', 'city',
-                                                  'cloudServerHostHeaderOverride', 'cloudService',
-                                                  'continent', 'country', 'hostname', 'latitude', 'longitude']
-                            if 'livenessHosts' in section_data.columns:
-                                columns.remove('livenessHosts')
-                                root_logger.info(tabulate(section_data[datacenter_columns], headers=datacenter_columns, numalign='center', tablefmt='psql', showindex=False))
-                                print()
-                                root_logger.info('livenessHosts')
-                                root_logger.info(tabulate(section_data['livenessHosts'], numalign='center', tablefmt='psql', showindex=False))
-                            else:
-                                root_logger.info(tabulate(section_data[datacenter_columns], headers=datacenter_columns, numalign='center', tablefmt='psql', showindex=False))
-                        else:
-                            print(section[0])
-                            root_logger.info(tabulate(section_data, headers='keys', numalign='center', tablefmt='psql', showindex=False))
-                    except KeyError:
-                        pass
+                            live_data = version_resp.json()['livenessSettings']
+                            output = util.dict_to_list_2(live_data.values())
+                            columns = util.dict_to_list(live_data.keys())
+                            print(sectn)
+                            root_logger.info(tabulate(output, headers=columns, numalign='center', tablefmt='psql'))
+
+                    if sectn == 'warnings':
+                        warnings_output = []
+                        headers = ['detail', 'title', 'type', 'jsonPointer']
+                        if 'warnings' in data.keys():
+                            for i, x in enumerate(data['warnings'], start=1):
+                                temp = util.dict_to_list(x.values())
+                                temp.insert(0, i)
+                                warnings_output.append(temp)
+                            print(sectn)
+                            root_logger.info(tabulate(warnings_output, headers=headers, numalign='center', tablefmt='psql'))
                 else:
                     try:
-                        if 'description' in df.columns:
-                            section.insert(3, 'description')
-                        if 'balancingType' in df.columns:
+                        jsonkeys = ['originId', 'version', 'deleted', 'immutable',
+                                    'createdBy', 'createdDate',
+                                    'lastModifiedBy', 'lastModifiedDate']
+                        if 'description' in data.keys():
+                            section.insert(4, 'description')
+                            jsonkeys.insert(4, 'description')
+                        if 'balancingType' in data.keys():
                             section.insert(3, 'balancingType')
-                        root_logger.info(tabulate(df[section], headers=section, numalign='center', tablefmt='psql', showindex=False))
+                            jsonkeys.insert(3, 'balancingType')
+                        main_output = [[data[k] for k in jsonkeys if k in data]]
+                        root_logger.info(tabulate(main_output, headers=section, numalign='center', tablefmt='psql'))
                     except:
-                        root_logger.info(tabulate(df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
+                        print_json(data=data)
+                        root_logger.error('exception')
 
 
 @cli.command(short_help='ALB - Update load balancing description')

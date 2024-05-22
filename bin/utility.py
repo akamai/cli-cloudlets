@@ -17,6 +17,7 @@ import ast
 import json
 import time
 from datetime import datetime
+from typing import List
 
 import click
 import pandas as pd
@@ -428,6 +429,30 @@ class Utility:
                     if any(dc_dict.values()):  # Check if at least one value is not None
                         result.append(dc_dict)
         return result
+
+    def dict_to_list(self, value: list) -> list[str]:
+        output = []
+        for v in value:
+            if isinstance(v, bool) or isinstance(v, int) or isinstance(v, float):
+                v = str(v)
+                output.append(v)
+            elif isinstance(v, str):
+                output.append(v)
+        return output
+
+    def dict_to_list_2(self, value: list) -> list[list[str]]:
+        """
+        same as def dict_to_list
+        but return [list]
+        """
+        output = []
+        for v in value:
+            if isinstance(v, bool) or isinstance(v, int) or isinstance(v, float):
+                v = str(v)
+                output.append(v)
+            elif isinstance(v, str):
+                output.append(v)
+        return [output]
 
 
 class PythonLiteralOption(click.Option):
