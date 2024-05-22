@@ -196,45 +196,6 @@ class Utility:
         policy_name, policy_id, policy_info = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
         return policy_name, policy_id, policy_info
 
-    def retrieve_shared_policy(self, session, root_logger, cloudlet_object,
-                               policy_name: str | None = None,
-                               policy_id: int | None = None) -> tuple:
-
-        if policy_name:
-            root_logger.info(f'...searching for cloudlet policy {policy_name}')
-            id, policy_info, full_policy_detail = cloudlet_object.list_shared_policies_by_name(session, policy_name=policy_name)
-        else:
-            id = policy_id
-            root_logger.info(f'...searching for cloudlet policy-id {id}')
-            policy_name, policy_info, full_policy_detail = cloudlet_object.list_shared_policies_by_id(session, policy_id=id)
-            print(f'Policy Name: {policy_name}') if policy_name else None
-
-        df = pd.json_normalize(full_policy_detail)
-
-        df.rename(columns={'id': 'policyId',
-                           'modifiedBy': 'lastModifiedBy'}, inplace=True)
-        columns = ['name', 'policyType', 'policyId', 'description', 'lastModifiedBy']
-        print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False))
-
-        if not policy_info:
-            root_logger.info('Not found')
-        else:
-            df = pd.DataFrame(policy_info)
-            staging = df.loc[df['network'] == 'staging'].iloc[0, 0]
-            production = df.loc[df['network'] == 'production'].iloc[0, 0]
-            df = cloudlet_object.get_active_properties(session, policy_id=id)
-            if not df.empty:
-                df['policy version'] = df.apply(lambda row: self.fill_column(row, staging, production), axis=1)
-                new_header = f'Policy ID ({policy_id}) version'
-                df.rename(columns={'policy version': new_header}, inplace=True)
-                columns = [new_header, 'network', 'property name', 'property version']
-                print(tabulate(df[columns], headers='keys', tablefmt='psql', showindex=False, numalign='center'))
-                return df, policy_name, id, policy_info
-
-        print(f'{df} {policy_name} {id} {policy_info}')
-
-        return df, policy_name, id, policy_info
-
     def fill_column(self, row, staging_version: int, production_version: int):
         if row['network'] == 'staging':
             return staging_version
@@ -332,42 +293,6 @@ class Utility:
                 elif len(col) == 1 and col[0] not in [type, '0', 'None', '']:
                     new_columns.append(column)
         return type, new_columns, match_types
-
-    def generate_excel(self, filename: str, df1: pd.DataFrame, df2: pd.DataFrame | None = None) -> None:
-        if df2.empty:
-            df_dict = {'match_rules': df1}
-        else:
-            df_dict = {'match_rules': df1, 'match_value': df2}
-        writer = pd.ExcelWriter(filename, engine='xlsxwriter')
-        for sheetname, df in df_dict.items():
-            df.to_excel(writer, sheet_name=sheetname)
-            df.columns = df.columns.str.upper()
-            workbook = writer.book
-            worksheet = writer.sheets[sheetname]
-
-            header_format = workbook.add_format({'bold': True,
-                                                'text_wrap': False,
-                                                'valign': 'top',
-                                                'align': 'middle',
-                                                'fg_color': '#FFC588',  # orange
-                                                'border': 1,
-                                                })
-            index_format = workbook.add_format({'bold': True,
-                                                'text_wrap': False,
-                                                'valign': 'top',
-                                                'align': 'left'
-                                                })
-            # format table headers
-            for col_num, value in enumerate(df.columns.values, 1):
-                worksheet.write(0, col_num, value, header_format)
-
-            # format index column
-            for i, value in enumerate(df.index.values, 1):
-                worksheet.write(i, 0, value, index_format)
-
-            worksheet.freeze_panes(1, 2)
-            worksheet.autofit()
-        writer.close()
 
     def convert_df_float_to_int(self, value):
         try:
