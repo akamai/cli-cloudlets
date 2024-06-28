@@ -1335,6 +1335,61 @@ def alb_list_lb_version(config, loadbalance):
         print_json(data=response.json())
 
 
+# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
+# Clone from existing valid load balancing version.
+@cli.command(short_help='ALB - Clone new version from existing valid load balancing policy')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)  # version
+@click.option('--numbers', 'numbers', help='List of DC percentage values to update separated by space adding up to 100', required=False)  # version
+@click.option('--descr', metavar='', help='description', required=True)
+@pass_config
+def alb_clone_lb(config, loadbalance, version, numbers, descr):
+    """
+    Clone from existing valid load balancing version.
+    """
+    try:
+        # Split the input string into a list of integers
+        int_list = [int(num) for num in numbers.split()]
+        total_sum = sum(int_list)
+        if total_sum == 100:
+            root_logger.info(f' {int_list}')
+            base_url, session = init_config(config.edgerc, config.section)
+            cloudlet_object = Cloudlet(base_url, config.account_key)
+            cloudlet_object.get_account_name(session, config.account_key)
+            response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)  # create new one in api wrapped for this.
+            if response.status_code == 200:
+                response = response.json()
+                print(response)
+                del response['createdBy']
+                del response['createdDate']
+                print(response)
+                print()
+                for counter, data_center in enumerate(response['dataCenters']):
+                    data_center['percent'] = int_list[counter]
+                # print("")
+                print(response)
+                if response.get('livenessSettings') is not None:
+                    response = cloudlet_object.manage_load_balancing_version(session, loadbalance, response['balancingType'], response['dataCenters'], descr, response['livenessSettings'])
+                    if response.status_code == 200:
+                        msg = f"'{response.json()}'"
+                        msg = json.dumps(msg, indent=4)  # formatting the json for better output
+                        root_logger.info(msg)
+                    else:
+                        print_json(data=response.json())
+                else:
+                    response = cloudlet_object.manage_load_balancing_version(session, loadbalance, response['balancingType'], response['dataCenters'], descr, '')
+                    if response.status_code == 200:
+                        msg = f"'{response.json()}'"
+                        msg = json.dumps(msg, indent=4)  # formatting the json for better output
+                        root_logger.info(msg)
+                    else:
+                        print_json(data=response.json())
+            else:
+                print_json(data=response.json())
+    except ValueError:
+        print('Error: Please provide a valid list of integers separated by space adding upto 100')
+
+
 # adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
 # List current activations version for a Load balancing configuration
 @cli.command(short_help='ALB - List current activations version for a Load balancing configuration')
