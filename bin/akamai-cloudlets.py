@@ -1,5 +1,5 @@
 """
-Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
+Copyright 2020 Akamai Technologies, Inc. All Rights Reserved..
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -1285,6 +1285,52 @@ def alb_update(config, loadbalance, descr):
     if response.status_code == 200:
         msg = f"Update load balancing '{response.json()['originId']}'"
         msg = f"{msg} description to '{response.json()['description']}' succesfully"
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
+
+# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
+# @cli.command(short_help='ALB - Update load balancing percentage')
+# @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+# @click.option('--descr', metavar='', help='description', required=True)
+# @pass_config
+# def alb_update_lb_info(config, loadbalance, descr):
+#     """
+#     Update load balancing information
+#     """
+#     base_url, session = init_config(config.edgerc, config.section)
+#     cloudlet_object = Cloudlet(base_url, config.account_key)
+#     cloudlet_object.get_account_name(session, config.account_key)
+#     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr) # create new one in api wrapped for this.
+#     if response.status_code == 200:
+#         msg = f"Update load balancing '{response.json()['originId']}'"
+#         msg = f"{msg} description to '{response.json()['description']}' succesfully"
+#         root_logger.info(msg)
+#     else:
+#         print_json(data=response.json())
+
+# adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
+
+
+@cli.command(short_help='ALB - Activate LB')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)  # check
+@click.option('--network', metavar='', help='Specify Akamai network - Staging/Production', required=True)  # network
+@click.option('--dryrun', metavar='', type=bool, default=False, help='dryrun - If true, the operation validates the configuration, but does not activate the load balancing version. Default is false', required=False)  # dryrun
+@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)  # version
+@pass_config
+def alb_lb_activate(config, loadbalance, network, dryrun, version):
+    """
+    Activate load balancing policy
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.activation_load_balancing_config_version(session, loadbalance, version, network, dryrun)  # create new one in api wrapped for this.
+    if response.status_code == 200:
+        if (dryrun):
+            msg = f"Load balancing policy '{response.json()['originId']}' was successfully tested with dryrun. Please run as --dryrun False to activate "
+        else:
+            msg = f"load balancing policy '{response.json()['originId']}' is on its way to Akamai {network} network"  # Fix bug - Activate version already active
         root_logger.info(msg)
     else:
         print_json(data=response.json())
