@@ -1288,25 +1288,29 @@ def alb_update(config, loadbalance, descr):
         root_logger.info(msg)
     else:
         print_json(data=response.json())
+
+
 # adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
-# @cli.command(short_help='ALB - Update load balancing percentage')
-# @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-# @click.option('--descr', metavar='', help='description', required=True)
-# @pass_config
-# def alb_update_lb_info(config, loadbalance, descr):
-#     """
-#     Update load balancing information
-#     """
-#     base_url, session = init_config(config.edgerc, config.section)
-#     cloudlet_object = Cloudlet(base_url, config.account_key)
-#     cloudlet_object.get_account_name(session, config.account_key)
-#     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr) # create new one in api wrapped for this.
-#     if response.status_code == 200:
-#         msg = f"Update load balancing '{response.json()['originId']}'"
-#         msg = f"{msg} description to '{response.json()['description']}' succesfully"
-#         root_logger.info(msg)
-#     else:
-#         print_json(data=response.json())
+# Get a load balancing version
+@cli.command(short_help='ALB - Get load balancing information')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--version', metavar='', help='description', type=int, required=True)
+@pass_config
+def alb_lb_get_info(config, loadbalance, version):
+    """
+    Get load balancing information
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)  # create new one in api wrapped for this.
+    if response.status_code == 200:
+        msg = f"'{response.json()}'"
+        msg = json.dumps(msg, indent=4)  # Bug: Format better in output
+        # print(msg)  # Bug fix how to output this better
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
 
 
 # adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
@@ -1325,7 +1329,7 @@ def alb_list_lb_version(config, loadbalance):
     if response.status_code == 200:
         msg = f"'{response.json()}'"
         msg = json.dumps(msg, indent=4)  # Bug: Format better in output
-        print(msg)  # Bug fix how to output this better
+        # print(msg)  # Bug fix how to output this better
         root_logger.info(msg)
     else:
         print_json(data=response.json())
@@ -1338,7 +1342,7 @@ def alb_list_lb_version(config, loadbalance):
 @pass_config
 def alb_lb_activate_version(config, loadbalance):
     """
-    List load balancing version
+    List current activations version for a Load balancing configuration
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -1347,7 +1351,7 @@ def alb_lb_activate_version(config, loadbalance):
     if response.status_code == 200:
         msg = f"'{response.json()}'"
         msg = json.dumps(msg, indent=4)  # formatting the json for better output
-        print(msg)  # Bug fix how to output this better
+        # print(msg)  # Bug fix how to output this better
         root_logger.info(msg)
     else:
         print_json(data=response.json())
