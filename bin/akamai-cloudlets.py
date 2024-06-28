@@ -1,5 +1,5 @@
 """
-Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
+Copyright 2020 Akamai Technologies, Inc. All Rights Reserved..
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -1282,6 +1282,48 @@ def alb_update(config, loadbalance, descr):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr)
+    if response.status_code == 200:
+        msg = f"Update load balancing '{response.json()['originId']}'"
+        msg = f"{msg} description to '{response.json()['description']}' succesfully"
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
+
+# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
+# @cli.command(short_help='ALB - Update load balancing percentage')
+# @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+# @click.option('--descr', metavar='', help='description', required=True)
+# @pass_config
+# def alb_update_lb_info(config, loadbalance, descr):
+#     """
+#     Update load balancing information
+#     """
+#     base_url, session = init_config(config.edgerc, config.section)
+#     cloudlet_object = Cloudlet(base_url, config.account_key)
+#     cloudlet_object.get_account_name(session, config.account_key)
+#     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr) # create new one in api wrapped for this.
+#     if response.status_code == 200:
+#         msg = f"Update load balancing '{response.json()['originId']}'"
+#         msg = f"{msg} description to '{response.json()['description']}' succesfully"
+#         root_logger.info(msg)
+#     else:
+#         print_json(data=response.json())
+
+# adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
+
+
+@cli.command(short_help='ALB - List load balancing versions and activation state')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)  # check
+@click.option('--descr', metavar='', help='description', required=True)
+@pass_config
+def alb_lb_activate(config, loadbalance):
+    """
+    List load balancing versions
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.list_load_balancing_config_versions(session, loadbalance)  # create new one in api wrapped for this.
     if response.status_code == 200:
         msg = f"Update load balancing '{response.json()['originId']}'"
         msg = f"{msg} description to '{response.json()['description']}' succesfully"
