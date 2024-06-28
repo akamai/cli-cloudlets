@@ -1288,7 +1288,6 @@ def alb_update(config, loadbalance, descr):
         root_logger.info(msg)
     else:
         print_json(data=response.json())
-
 # adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
 # @cli.command(short_help='ALB - Update load balancing percentage')
 # @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
@@ -1309,9 +1308,53 @@ def alb_update(config, loadbalance, descr):
 #     else:
 #         print_json(data=response.json())
 
+
+# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
+# List load balancing version
+@cli.command(short_help='ALB - List version for a load balancing policy')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@pass_config
+def alb_list_lb_version(config, loadbalance):
+    """
+    List load balancing version
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.list_load_balancing_version(session, loadbalance)  # create new one in api wrapped for this.
+    if response.status_code == 200:
+        msg = f"'{response.json()}'"
+        msg = json.dumps(msg, indent=4)  # Bug: Format better in output
+        print(msg)  # Bug fix how to output this better
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
+
+
 # adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
+# List current activations version for a Load balancing configuration
+@cli.command(short_help='ALB - List current activations version for a Load balancing configuration')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@pass_config
+def alb_lb_activate_version(config, loadbalance):
+    """
+    List load balancing version
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.list_load_balancing_config_activation(session, loadbalance)
+    if response.status_code == 200:
+        msg = f"'{response.json()}'"
+        msg = json.dumps(msg, indent=4)  # formatting the json for better output
+        print(msg)  # Bug fix how to output this better
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
 
 
+# adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
+# Activate Load balancing policies
 @cli.command(short_help='ALB - Activate LB')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)  # check
 @click.option('--network', metavar='', help='Specify Akamai network - Staging/Production', required=True)  # network
