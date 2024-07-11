@@ -1340,7 +1340,7 @@ def alb_list_lb_version(config, loadbalance):
 @cli.command(short_help='ALB - Clone new version from existing valid load balancing policy')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)  # version
-@click.option('--numbers', 'numbers', help='List of DC percentage values to update separated by space adding up to 100', required=False)  # version
+@click.option('--numbers', 'numbers', help='List of DC percentage values to update separated by space adding up to 100', required=True)  # version
 @click.option('--descr', metavar='', help='description', required=True)
 @pass_config
 def alb_clone_lb(config, loadbalance, version, numbers, descr):
@@ -1359,15 +1359,10 @@ def alb_clone_lb(config, loadbalance, version, numbers, descr):
             response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)  # create new one in api wrapped for this.
             if response.status_code == 200:
                 response = response.json()
-                print(response)
                 del response['createdBy']
                 del response['createdDate']
-                print(response)
-                print()
                 for counter, data_center in enumerate(response['dataCenters']):
                     data_center['percent'] = int_list[counter]
-                # print("")
-                print(response)
                 if response.get('livenessSettings') is not None:
                     response = cloudlet_object.manage_load_balancing_version(session, loadbalance, response['balancingType'], response['dataCenters'], descr, response['livenessSettings'])
                     if response.status_code == 200:
