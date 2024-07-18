@@ -694,7 +694,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
         policy_data['description'] = description
         create_response = cloudlet_object.create_clone_policy(session, policy_data)
 
-    if create_response.status_code == 201:
+    if create_response.ok:
         print(f'Policy {create_response.json()["policyId"]} created successfully')
     else:
         root_logger.info('ERROR: Unable to create policy')
@@ -832,7 +832,7 @@ def clone(config, version, policy_id, group_id, new_policy):
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id)
     else:
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id, version=version)
-    if response.status_code == 200:
+    if response.ok:
         print(f'Policy {response.json()["id"]} clone successfully')
     else:
         root_logger.info('ERROR: Unable to clone policy')
@@ -971,7 +971,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
         response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
                                                            version=version, network=network,
                                                            additionalPropertyNames=additionalPropertyNames)
-        if response.status_code != 200:
+        if not response.ok:
             print(f'{response.json()["errorMessage"]}')
             exit(-1)
         else:
@@ -1128,8 +1128,8 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
     lookup_resp = cloudlet_object.list_alb_conditional_origin(session, type)
 
     if list:
-        # if optjson:
-        #    print_json(data=lookup_resp.json())
+        if optjson:
+            return print_json(data=lookup_resp.json())
         df = pd.DataFrame(lookup_resp.json())
         df = df.rename(columns={'originId': 'Load Balancing ID'})
         if name_contains and not df.empty:
@@ -1272,7 +1272,7 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
 
 @cli.command(short_help='ALB - Update load balancing description')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--descr', metavar='', help='description', required=True)
+@click.option('--descr', metavar='', help='new description', required=True)
 @pass_config
 def alb_update(config, loadbalance, descr):
     """
@@ -1282,7 +1282,7 @@ def alb_update(config, loadbalance, descr):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr)
-    if response.status_code == 200:
+    if response.ok:
         msg = f"Update load balancing '{response.json()['originId']}'"
         msg = f"{msg} description to '{response.json()['description']}' succesfully"
         root_logger.info(msg)
@@ -1290,31 +1290,21 @@ def alb_update(config, loadbalance, descr):
         print_json(data=response.json())
 
 
-# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
-# Get a load balancing version
 @cli.command(short_help='ALB - Get load balancing information')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--version', metavar='', help='description', type=int, required=True)
 @pass_config
 def alb_lb_get_info(config, loadbalance, version):
     """
-    Get load balancing information
+    Get load balancing version information
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)  # create new one in api wrapped for this.
-    if response.status_code == 200:
-        msg = f"'{response.json()}'"
-        msg = json.dumps(msg, indent=4)  # Bug: Format better in output
-        # print(msg)  # Bug fix how to output this better
-        root_logger.info(msg)
-    else:
-        print_json(data=response.json())
+    response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
+    print_json(data=response.json())
 
 
-# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
-# List load balancing version
 @cli.command(short_help='ALB - List version for a load balancing policy')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @pass_config
@@ -1325,28 +1315,24 @@ def alb_list_lb_version(config, loadbalance):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.list_load_balancing_version(session, loadbalance)  # create new one in api wrapped for this.
-    if response.status_code == 200:
-        msg = f"'{response.json()}'"
-        msg = json.dumps(msg, indent=4)  # Bug: Format better in output
-        # print(msg)  # Bug fix how to output this better
-        root_logger.info(msg)
-    else:
-        print_json(data=response.json())
+    response = cloudlet_object.list_load_balancing_version(session, loadbalance)
+    if response.ok and len(response.json()) == 0:
+        return root_logger.info('load balancing policy not found')
+
+    print_json(data=response.json())
 
 
-# adding alb_update_lb_info as part of GitHub issue #29 (GH29 branch)
-# Clone from existing valid load balancing version.
 @cli.command(short_help='ALB - Clone new version from existing valid load balancing policy')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)  # version
-@click.option('--numbers', 'numbers', help='List of DC percentage values to update separated by space adding up to 100', required=True)  # version
-@click.option('--descr', metavar='', help='description', required=True)
+@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)
+@click.option('--numbers', 'numbers', metavar='', help='Percent Traffic separated by space adding up to 100')
+@click.option('--descr', metavar='', help='description', required=False)
 @pass_config
 def alb_clone_lb(config, loadbalance, version, numbers, descr):
     """
     Clone from existing valid load balancing version.
     """
+
     try:
         # Split the input string into a list of integers
         int_list = [int(num) for num in numbers.split()]
@@ -1385,8 +1371,6 @@ def alb_clone_lb(config, loadbalance, version, numbers, descr):
         print('Error: Please provide a valid list of integers separated by space adding upto 100')
 
 
-# adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
-# List current activations version for a Load balancing configuration
 @cli.command(short_help='ALB - List current activations version for a Load balancing configuration')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @pass_config
@@ -1398,22 +1382,15 @@ def alb_lb_activate_version(config, loadbalance):
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     response = cloudlet_object.list_load_balancing_config_activation(session, loadbalance)
-    if response.status_code == 200:
-        msg = f"'{response.json()}'"
-        msg = json.dumps(msg, indent=4)  # formatting the json for better output
-        # print(msg)  # Bug fix how to output this better
-        root_logger.info(msg)
-    else:
-        print_json(data=response.json())
+    print_json(data=response.json())
 
 
-# adding alb_update_lb_list_versions as part of GitHub issue #29 (GH29 branch)
-# Activate Load balancing policies
 @cli.command(short_help='ALB - Activate LB')
-@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)  # check
-@click.option('--network', metavar='', help='Specify Akamai network - Staging/Production', required=True)  # network
-@click.option('--dryrun', metavar='', type=bool, default=False, help='dryrun - If true, the operation validates the configuration, but does not activate the load balancing version. Default is false', required=False)  # dryrun
-@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)  # version
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--network', metavar='', type=click.Choice(['staging', 'production'], case_sensitive=False),
+              help='Akamai network (staging or production)', required=True)
+@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)
+@click.option('--dryrun', metavar='', help='Validate confiiguration only', is_flag=True, required=False)
 @pass_config
 def alb_lb_activate(config, loadbalance, network, dryrun, version):
     """
@@ -1422,12 +1399,15 @@ def alb_lb_activate(config, loadbalance, network, dryrun, version):
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.activation_load_balancing_config_version(session, loadbalance, version, network, dryrun)  # create new one in api wrapped for this.
-    if response.status_code == 200:
-        if (dryrun):
-            msg = f"Load balancing policy '{response.json()['originId']}' was successfully tested with dryrun. Please run as --dryrun False to activate "
+    response = cloudlet_object.activation_load_balancing_config_version(session, loadbalance, version, network, dryrun)
+    print()
+    if response.ok:
+        lb = f"'{loadbalance}' v{version}"
+        if dryrun:
+            msg = f'load balancing policy {lb} was successfully tested.  To activate, remove --dryrun'
         else:
-            msg = f"load balancing policy '{response.json()['originId']}' is on its way to Akamai {network} network"  # Fix bug - Activate version already active
+            msg = f'load balancing policy {lb} was successfully activated and'
+            msg = f"{msg} currently {response.json()['status']} on Akamai {network} network"
         root_logger.info(msg)
     else:
         print_json(data=response.json())
@@ -1553,7 +1533,7 @@ def alb_origin_bulk(config, input, version, optcsv):
 
     # rebuild column name based on number of datacenters
     num_datacenters = len(df_normalized_datacenter.columns)
-    new_columns = [f'datacenter_{i+1}' for i in range(num_datacenters)]
+    new_columns = [f'datacenter_{i + 1}' for i in range(num_datacenters)]
     df_normalized_datacenter.columns = new_columns
     result_df = pd.concat([df, df_normalized_datacenter], axis=1)
     result_df = result_df.rename(columns={'loadbalance': 'Load Balancing ID'})
