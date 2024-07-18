@@ -1324,51 +1324,57 @@ def alb_list_lb_version(config, loadbalance):
 
 @cli.command(short_help='ALB - Clone new version from existing valid load balancing policy')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)
-@click.option('--numbers', 'numbers', metavar='', help='Percent Traffic separated by space adding up to 100')
-@click.option('--descr', metavar='', help='description', required=False)
+@click.option('--version', 'version', metavar='', help='Load balancing version to clone from', type=int, required=True)
+@click.option('--traffic', 'traffic', metavar='', help='Percent Traffic separated by space adding up to 100', default='100')
+@click.option('--note', 'note', metavar='', help='Version Notes', required=False)
 @pass_config
-def alb_clone_lb(config, loadbalance, version, numbers, descr):
+def alb_clone_lb(config, loadbalance, version, traffic, note):
     """
     Clone from existing valid load balancing version.
     """
 
-    try:
-        # Split the input string into a list of integers
-        int_list = [int(num) for num in numbers.split()]
-        total_sum = sum(int_list)
-        if total_sum == 100:
-            root_logger.info(f' {int_list}')
-            base_url, session = init_config(config.edgerc, config.section)
-            cloudlet_object = Cloudlet(base_url, config.account_key)
-            cloudlet_object.get_account_name(session, config.account_key)
-            response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)  # create new one in api wrapped for this.
-            if response.status_code == 200:
-                response = response.json()
-                del response['createdBy']
-                del response['createdDate']
-                for counter, data_center in enumerate(response['dataCenters']):
-                    data_center['percent'] = int_list[counter]
-                if response.get('livenessSettings') is not None:
-                    response = cloudlet_object.manage_load_balancing_version(session, loadbalance, response['balancingType'], response['dataCenters'], descr, response['livenessSettings'])
-                    if response.status_code == 200:
-                        msg = f"'{response.json()}'"
-                        msg = json.dumps(msg, indent=4)  # formatting the json for better output
-                        root_logger.info(msg)
-                    else:
-                        print_json(data=response.json())
-                else:
-                    response = cloudlet_object.manage_load_balancing_version(session, loadbalance, response['balancingType'], response['dataCenters'], descr, '')
-                    if response.status_code == 200:
-                        msg = f"'{response.json()}'"
-                        msg = json.dumps(msg, indent=4)  # formatting the json for better output
-                        root_logger.info(msg)
-                    else:
-                        print_json(data=response.json())
-            else:
-                print_json(data=response.json())
-    except ValueError:
-        print('Error: Please provide a valid list of integers separated by space adding upto 100')
+    traffic_list = [int(num) for num in traffic.split()]
+    total_sum = sum(traffic_list)
+    if total_sum != 100:
+        root_logger.error(traffic_list)
+        return root_logger.error('Total traffic must be equal to 100')
+
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
+    if not response.ok:
+        return print_json(data=response.json())
+
+    if note is None:
+        note = f'clone from v{version}'
+
+    lb_version_response = response.json()
+    cd_len = len(lb_version_response['dataCenters'])
+    traffic_len = len(traffic_list)
+
+    if cd_len != traffic_len:
+        root_logger.error('Percentage splits do not match number of data centers')
+        dcs = f'{cd_len} data centers found'
+        ts = f'{traffic_len} traffic splits {traffic_list}'
+        root_logger.error(dcs)
+        return root_logger.error(ts)
+
+    for counter, data_center in enumerate(lb_version_response['dataCenters']):
+        data_center['percent'] = traffic_list[counter]
+
+    liveness_response = cloudlet_object.manage_load_balancing_version(session, loadbalance,
+                                                                      lb_version_response['balancingType'],
+                                                                      lb_version_response['dataCenters'],
+                                                                      note,
+                                                                      lb_version_response.get('livenessSettings'))
+    if liveness_response.ok:
+        lb_version = liveness_response.json()['version']
+        print_json(data=liveness_response.json())
+        print()
+        root_logger.info(f'{loadbalance} v{lb_version} is successfully cloned.')
+        print()
+        root_logger.info(f'rerun akamai cloudlet alb-origin --lb {loadbalance} to check version status')
 
 
 @cli.command(short_help='ALB - List current activations version for a Load balancing configuration')

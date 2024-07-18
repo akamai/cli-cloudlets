@@ -502,17 +502,19 @@ class Cloudlet:
     def manage_load_balancing_version(self, session, origin_id: str,
                                       balancing_type: str,
                                       datacenters: list,
-                                      description: str,
-                                      livenessSettings: dict):
+                                      note: str | None = None,
+                                      livenessSettings: dict | None = None):
         """create or delete load balancing version"""
         url = f'https://{self.access_hostname}/cloudlets/api/v2/origins/{origin_id}/versions'
         headers = {'accept': 'application/json'}
         payload = {'balancingType': balancing_type}
-        if description:
-            payload['description'] = description
+        if note:
+            payload['description'] = note
         if datacenters:
             payload['dataCenters'] = datacenters
-        if livenessSettings:
+        if livenessSettings is None:
+            print('No liveness setting found')
+        else:
             payload['livenessSettings'] = livenessSettings
         if origin_id:
             payload['originId'] = origin_id
