@@ -80,6 +80,10 @@ Main program file that wraps this functionality in a command line utility:
 - [alb-origin](#alb-origin)
 - [alb-origin-bulk](#alb-origin-bulk)
 - [alb-update](#alb-update)
+- [alb-lb-get-info](#alb-lb-get-info)
+- [alb-clone-lb](#alb-clone-lb)
+- [alb-lb-activate](#alb-activate)
+- [alb-lb-activate-version](#alb-lb-activate-version)
 
 ## Global Flags
 
@@ -392,6 +396,74 @@ Argument Details:
 ```xml
   --lb        load balancing name (case sensitive, require exact name match) [required]
   --descr     description  [required]
+```
+
+### alb-lb-get-info
+
+Get load balancing version information.
+
+```xml
+%  akamai cloudlets alb-lb-get-info --lb sample --version 2
+%  akamai cloudlets alb-lb-get-info --lb sample --version 5
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match)  [required]
+  --version   description  [required]
+  -h, --help  Show this message and exit
+```
+
+### alb-clone-lb
+
+Clone from existing valid load balancing version. For now you can adjust ONLY traffic splt and add version notes.
+
+```xml
+%  akamai cloudlets alb-clone-lb --lb sample --version 2 --traffic "10 90" --note "Split 90 10 across the two lb"
+%  akamai cloudlets alb-clone-lb --lb sample --version 5 --traffic "60 40" --note "Split 60 40"
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match)[required]
+  --version   Load balancing version to clone from  [required]
+  --traffic   Percent Traffic separated by space adding up to 100
+  --note      Version Notes
+```
+
+### alb-lb-activate
+
+Activate load balancing policy.
+
+```xml
+%  akamai cloudlets alb-lb-activate --lb sample --network staging --version 6
+%  akamai cloudlets alb-lb-activate --lb sample --network production --version 9 --dryrun true
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match)  [required]
+  --network   Akamai network (staging or production)  [required]
+  --version   Load balancing version to activate  [required]
+  --dryrun    Validate confiiguration only. By default False
+```
+
+### alb-lb-activate-version
+
+List current activations version for a Load balancing configuration
+
+```xml
+%  akamai cloudlets alb-lb-activate-version --lb sample
+%  akamai cloudlets alb-lb-activate-version --lb sample2
+```
+
+Argument Details:
+
+```xml
+  --lb        load balancing name (case sensitive, require exact name match)  [required]
 ```
 
 # Contribution

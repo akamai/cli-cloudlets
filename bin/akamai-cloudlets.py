@@ -1292,7 +1292,7 @@ def alb_update(config, loadbalance, descr):
 
 @cli.command(short_help='ALB - Get load balancing information')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--version', metavar='', help='description', type=int, required=True)
+@click.option('--version', metavar='', help='Load balancing version', type=int, required=True)
 @pass_config
 def alb_lb_get_info(config, loadbalance, version):
     """
