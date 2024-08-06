@@ -1290,38 +1290,6 @@ def alb_update(config, loadbalance, descr):
         print_json(data=response.json())
 
 
-@cli.command(short_help='ALB - Get load balancing information')
-@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--version', metavar='', help='Load balancing version', type=int, required=True)
-@pass_config
-def alb_lb_get_info(config, loadbalance, version):
-    """
-    Get load balancing version information
-    """
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
-    print_json(data=response.json())
-
-
-@cli.command(short_help='ALB - List version for a load balancing policy')
-@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@pass_config
-def alb_list_lb_version(config, loadbalance):
-    """
-    List load balancing version
-    """
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.list_load_balancing_version(session, loadbalance)
-    if response.ok and len(response.json()) == 0:
-        return root_logger.info('load balancing policy not found')
-
-    print_json(data=response.json())
-
-
 @cli.command(short_help='ALB - Clone new version from existing valid load balancing policy')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--version', 'version', metavar='', help='Load balancing version to clone from', type=int, required=True)
@@ -1375,20 +1343,6 @@ def alb_clone_lb(config, loadbalance, version, traffic, note):
         root_logger.info(f'{loadbalance} v{lb_version} is successfully cloned.')
         print()
         root_logger.info(f'rerun akamai cloudlet alb-origin --lb {loadbalance} to check version status')
-
-
-@cli.command(short_help='ALB - List current activations version for a Load balancing configuration')
-@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@pass_config
-def alb_lb_activate_version(config, loadbalance):
-    """
-    List current activations version for a Load balancing configuration
-    """
-    base_url, session = init_config(config.edgerc, config.section)
-    cloudlet_object = Cloudlet(base_url, config.account_key)
-    cloudlet_object.get_account_name(session, config.account_key)
-    response = cloudlet_object.list_load_balancing_config_activation(session, loadbalance)
-    print_json(data=response.json())
 
 
 @cli.command(short_help='ALB - Activate LB')
