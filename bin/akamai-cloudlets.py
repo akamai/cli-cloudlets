@@ -45,7 +45,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.1.3'
+PACKAGE_VERSION = '1.2.0'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -116,7 +116,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Cloudlets 1.1.3
+    Akamai CLI for Cloudlets 1.2.0
     '''
     config.edgerc = edgerc
     config.section = section
@@ -666,7 +666,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
             for every_group in group_response.json():
                 if every_group['groupName'].upper() == group_name.upper():
                     group_id = every_group['groupId']
-                    root_logger.info(f'...found group-id: {every_group["groupId"]}')
+                    root_logger.info(f"...found group-id: {every_group['groupId']}")
                     found_group = True
                     pass
             if not found_group:
@@ -695,7 +695,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
         create_response = cloudlet_object.create_clone_policy(session, policy_data)
 
     if create_response.ok:
-        print(f'Policy {create_response.json()["policyId"]} created successfully')
+        print(f"Policy {create_response.json()['policyId']} created successfully")
     else:
         root_logger.info('ERROR: Unable to create policy')
         print_json(data=create_response.json())
@@ -833,7 +833,7 @@ def clone(config, version, policy_id, group_id, new_policy):
     else:
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id, version=version)
     if response.ok:
-        print(f'Policy {response.json()["id"]} clone successfully')
+        print(f"Policy {response.json()['id']} clone successfully")
     else:
         root_logger.info('ERROR: Unable to clone policy')
         root_logger.info(json.dumps(response.json(), indent=4))
@@ -972,7 +972,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
                                                            version=version, network=network,
                                                            additionalPropertyNames=additionalPropertyNames)
         if not response.ok:
-            print(f'{response.json()["errorMessage"]}')
+            print(f"{response.json()['errorMessage']}")
             exit(-1)
         else:
             activation_response = response.json()[0]
@@ -985,7 +985,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
         activation_response_status_code = response.status_code
         root_logger.info(f'Activating policy {policy_name}')
         if activation_response_status_code != 202:
-            root_logger.info(f'{activation_response["errors"]}')
+            root_logger.info(f"{activation_response['errors']}")
             exit(-1)
 
     try:
@@ -996,7 +996,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
     root_logger.info(f'Activation Duration: {elapse_time}')
     msg = f'Successfully activate policy id {policy_id} on Akamai {network} network'
-    root_logger.info(f'{msg}')
+    root_logger.info(msg)
 
     return 0
 
