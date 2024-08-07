@@ -398,7 +398,7 @@ Argument Details:
 
 ### alb-clone-lb
 
-Clone from existing valid load balancing version. For now you can adjust ONLY traffic splt and add version notes.
+Clone from existing valid load balancing version. This functionality only supports traffic splitting and adding version notes.
 
 ```xml
 %  akamai cloudlets alb-clone-lb --lb sample --version 2 --traffic "10 90" --note "Split 90 10 across the two lb"

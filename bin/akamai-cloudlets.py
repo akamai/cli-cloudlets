@@ -840,7 +840,7 @@ def clone(config, version, policy_id, group_id, new_policy):
         exit(-1)
 
 
-@cli.command(short_help='Update new policy version with rules')
+@cli.command(short_help='Update new policy version with rules from JSON file')
 @click.option('--group-id', metavar='', help='Group ID without ctr_ prefix', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
@@ -851,7 +851,7 @@ def clone(config, version, policy_id, group_id, new_policy):
 @pass_config
 def update(config, group_id, policy_id, policy, notes, version, file, share):
     """
-    Update new policy version with rules
+    Update new policy version with rules from JSON file
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -1270,13 +1270,13 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
                         root_logger.info(tabulate(df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
 
 
-@cli.command(short_help='ALB - Update load balancing description')
+@cli.command(short_help='ALB - update load balancing description')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--descr', metavar='', help='new description', required=True)
 @pass_config
 def alb_update(config, loadbalance, descr):
     """
-    Update load balancing description
+    This command update load balancing description only.
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -1284,17 +1284,17 @@ def alb_update(config, loadbalance, descr):
     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr)
     if response.ok:
         msg = f"Update load balancing '{response.json()['originId']}'"
-        msg = f"{msg} description to '{response.json()['description']}' succesfully"
+        msg = f"{msg} description to '{response.json()['description']}' successfully"
         root_logger.info(msg)
     else:
         print_json(data=response.json())
 
 
-@cli.command(short_help='ALB - Clone new version from existing valid load balancing policy')
+@cli.command(short_help='ALB - clone load balancing from existing valid load balancing policy')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--version', 'version', metavar='', help='Load balancing version to clone from', type=int, required=True)
-@click.option('--traffic', 'traffic', metavar='', help='Percent Traffic separated by space adding up to 100', default='100')
-@click.option('--note', 'note', metavar='', help='Version Notes', required=False)
+@click.option('--version', metavar='', help='Load balancing version to clone from', type=int, required=True)
+@click.option('--traffic', metavar='', help='Percent Traffic separated by space adding up to 100', default='100')
+@click.option('--note', metavar='', help='Version Notes', required=False)
 @pass_config
 def alb_clone_lb(config, loadbalance, version, traffic, note):
     """
@@ -1304,6 +1304,7 @@ def alb_clone_lb(config, loadbalance, version, traffic, note):
     traffic_list = [int(num) for num in traffic.split()]
     total_sum = sum(traffic_list)
     if total_sum != 100:
+        print()
         root_logger.error(traffic_list)
         return root_logger.error('Total traffic must be equal to 100')
 
@@ -1322,8 +1323,10 @@ def alb_clone_lb(config, loadbalance, version, traffic, note):
     traffic_len = len(traffic_list)
 
     if cd_len != traffic_len:
+        print()
         root_logger.error('Percentage splits do not match number of data centers')
         dcs = f'{cd_len} data centers found'
+        print()
         ts = f'{traffic_len} traffic splits {traffic_list}'
         root_logger.error(dcs)
         return root_logger.error(ts)
@@ -1342,10 +1345,11 @@ def alb_clone_lb(config, loadbalance, version, traffic, note):
         print()
         root_logger.info(f'{loadbalance} v{lb_version} is successfully cloned.')
         print()
-        root_logger.info(f'rerun akamai cloudlet alb-origin --lb {loadbalance} to check version status')
+        root_logger.info('To check version status, please run')
+        root_logger.info(f'akamai cloudlets alb-origin --lb {loadbalance}')
 
 
-@cli.command(short_help='ALB - Activate LB')
+@cli.command(short_help='ALB - activate load balancing')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--network', metavar='', type=click.Choice(['staging', 'production'], case_sensitive=False),
               help='Akamai network (staging or production)', required=True)
