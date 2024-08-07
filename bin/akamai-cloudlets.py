@@ -1301,7 +1301,7 @@ def alb_clone_lb(config, loadbalance, version, traffic, notes):
     Clone from existing valid load balancing version.
     """
 
-    traffic_list = [int(num) for num in traffic.split()]
+    traffic_list = [float(num) for num in traffic.split()]
     total_sum = sum(traffic_list)
     if total_sum != 100:
         print()
