@@ -401,8 +401,8 @@ Argument Details:
 Clone from existing valid load balancing version. This functionality only supports traffic splitting and adding version notes.
 
 ```xml
-%  akamai cloudlets alb-clone-lb --lb sample --version 2 --traffic "10 90" --note "Split 90 10 across the two lb"
-%  akamai cloudlets alb-clone-lb --lb sample --version 5 --traffic "60 40" --note "Split 60 40"
+%  akamai cloudlets alb-clone-lb --lb sample --version 2 --traffic "10 90" --notes "Split 90 10 across the two lb"
+%  akamai cloudlets alb-clone-lb --lb sample --version 5 --traffic "60 40" --notes "Split 60 40"
 ```
 
 Argument Details:
@@ -411,7 +411,7 @@ Argument Details:
   --lb        load balancing name (case sensitive, require exact name match)[required]
   --version   Load balancing version to clone from  [required]
   --traffic   Percent Traffic separated by space adding up to 100
-  --note      Version Notes
+  --notes      Version Notes
 ```
 
 ### alb-lb-activate
