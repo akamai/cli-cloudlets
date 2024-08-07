@@ -1294,9 +1294,9 @@ def alb_update(config, loadbalance, descr):
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
 @click.option('--version', metavar='', help='Load balancing version to clone from', type=int, required=True)
 @click.option('--traffic', metavar='', help='Percent Traffic separated by space adding up to 100', default='100')
-@click.option('--note', metavar='', help='Version Notes', required=False)
+@click.option('--notes', metavar='', help='Version Notes')
 @pass_config
-def alb_clone_lb(config, loadbalance, version, traffic, note):
+def alb_clone_lb(config, loadbalance, version, traffic, notes):
     """
     Clone from existing valid load balancing version.
     """
@@ -1315,8 +1315,8 @@ def alb_clone_lb(config, loadbalance, version, traffic, note):
     if not response.ok:
         return print_json(data=response.json())
 
-    if note is None:
-        note = f'clone from v{version}'
+    if notes is None:
+        notes = f'clone from v{version}'
 
     lb_version_response = response.json()
     cd_len = len(lb_version_response['dataCenters'])
@@ -1337,7 +1337,7 @@ def alb_clone_lb(config, loadbalance, version, traffic, note):
     liveness_response = cloudlet_object.manage_load_balancing_version(session, loadbalance,
                                                                       lb_version_response['balancingType'],
                                                                       lb_version_response['dataCenters'],
-                                                                      note,
+                                                                      notes,
                                                                       lb_version_response.get('livenessSettings'))
     if liveness_response.ok:
         lb_version = liveness_response.json()['version']
