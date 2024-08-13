@@ -1,5 +1,5 @@
 """
-Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
+Copyright 2020 Akamai Technologies, Inc. All Rights Reserved..
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.1.3'
+PACKAGE_VERSION = '1.2.0'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -116,7 +116,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Cloudlets 1.1.3
+    Akamai CLI for Cloudlets 1.2.0
     '''
     config.edgerc = edgerc
     config.section = section
@@ -666,7 +666,7 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
             for every_group in group_response.json():
                 if every_group['groupName'].upper() == group_name.upper():
                     group_id = every_group['groupId']
-                    root_logger.info(f'...found group-id: {every_group["groupId"]}')
+                    root_logger.info(f"...found group-id: {every_group['groupId']}")
                     found_group = True
                     pass
             if not found_group:
@@ -694,8 +694,8 @@ def create_policy(config, group_id, group_name, policy, share, cloudlet_type, fi
         policy_data['description'] = description
         create_response = cloudlet_object.create_clone_policy(session, policy_data)
 
-    if create_response.status_code == 201:
-        print(f'Policy {create_response.json()["policyId"]} created successfully')
+    if create_response.ok:
+        print(f"Policy {create_response.json()['policyId']} created successfully")
     else:
         root_logger.info('ERROR: Unable to create policy')
         print_json(data=create_response.json())
@@ -832,15 +832,15 @@ def clone(config, version, policy_id, group_id, new_policy):
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id)
     else:
         response = cloudlet_object.clone_policy(session, name=new_policy, policy_id=policy_id, group_id=group_id, version=version)
-    if response.status_code == 200:
-        print(f'Policy {response.json()["id"]} clone successfully')
+    if response.ok:
+        print(f"Policy {response.json()['id']} clone successfully")
     else:
         root_logger.info('ERROR: Unable to clone policy')
         root_logger.info(json.dumps(response.json(), indent=4))
         exit(-1)
 
 
-@cli.command(short_help='Update new policy version with rules')
+@cli.command(short_help='Update new policy version with rules from JSON file')
 @click.option('--group-id', metavar='', help='Group ID without ctr_ prefix', required=False)
 @click.option('--policy', metavar='', help='Policy Name', required=False)
 @click.option('--policy-id', metavar='', help='Policy Id', required=False)
@@ -851,7 +851,7 @@ def clone(config, version, policy_id, group_id, new_policy):
 @pass_config
 def update(config, group_id, policy_id, policy, notes, version, file, share):
     """
-    Update new policy version with rules
+    Update new policy version with rules from JSON file
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
@@ -971,8 +971,8 @@ def activate(config, policy_id, policy, version, add_properties, network):
         response = cloudlet_object.activate_policy_version(session, policy_id=policy_id,
                                                            version=version, network=network,
                                                            additionalPropertyNames=additionalPropertyNames)
-        if response.status_code != 200:
-            print(f'{response.json()["errorMessage"]}')
+        if not response.ok:
+            print(f"{response.json()['errorMessage']}")
             exit(-1)
         else:
             activation_response = response.json()[0]
@@ -985,7 +985,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
         activation_response_status_code = response.status_code
         root_logger.info(f'Activating policy {policy_name}')
         if activation_response_status_code != 202:
-            root_logger.info(f'{activation_response["errors"]}')
+            root_logger.info(f"{activation_response['errors']}")
             exit(-1)
 
     try:
@@ -996,7 +996,7 @@ def activate(config, policy_id, policy, version, add_properties, network):
     elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
     root_logger.info(f'Activation Duration: {elapse_time}')
     msg = f'Successfully activate policy id {policy_id} on Akamai {network} network'
-    root_logger.info(f'{msg}')
+    root_logger.info(msg)
 
     return 0
 
@@ -1128,8 +1128,8 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
     lookup_resp = cloudlet_object.list_alb_conditional_origin(session, type)
 
     if list:
-        # if optjson:
-        #    print_json(data=lookup_resp.json())
+        if optjson:
+            return print_json(data=lookup_resp.json())
         df = pd.DataFrame(lookup_resp.json())
         df = df.rename(columns={'originId': 'Load Balancing ID'})
         if name_contains and not df.empty:
@@ -1270,21 +1270,108 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
                         root_logger.info(tabulate(df, headers='keys', numalign='center', tablefmt='psql', showindex=False))
 
 
-@cli.command(short_help='ALB - Update load balancing description')
+@cli.command(short_help='ALB - update load balancing description')
 @click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
-@click.option('--descr', metavar='', help='description', required=True)
+@click.option('--descr', metavar='', help='new description', required=True)
 @pass_config
 def alb_update(config, loadbalance, descr):
     """
-    Update load balancing description
+    This command update load balancing description only.
     """
     base_url, session = init_config(config.edgerc, config.section)
     cloudlet_object = Cloudlet(base_url, config.account_key)
     cloudlet_object.get_account_name(session, config.account_key)
     response = cloudlet_object.update_load_balancing_config(session, loadbalance, descr)
-    if response.status_code == 200:
+    if response.ok:
         msg = f"Update load balancing '{response.json()['originId']}'"
-        msg = f"{msg} description to '{response.json()['description']}' succesfully"
+        msg = f"{msg} description to '{response.json()['description']}' successfully"
+        root_logger.info(msg)
+    else:
+        print_json(data=response.json())
+
+
+@cli.command(short_help='ALB - clone load balancing from existing valid load balancing policy')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--version', metavar='', help='Load balancing version to clone from', type=int, required=True)
+@click.option('--traffic', metavar='', help='Percent Traffic separated by space adding up to 100', default='100')
+@click.option('--notes', metavar='', help='Version Notes')
+@pass_config
+def alb_clone_lb(config, loadbalance, version, traffic, notes):
+    """
+    Clone from existing valid load balancing version.
+    """
+
+    traffic_list = [float(num) for num in traffic.split()]
+    total_sum = sum(traffic_list)
+    if total_sum != 100:
+        print()
+        root_logger.error(traffic_list)
+        return root_logger.error('Total traffic must be equal to 100')
+
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
+    if not response.ok:
+        return print_json(data=response.json())
+
+    if notes is None:
+        notes = f'clone from v{version}'
+
+    lb_version_response = response.json()
+    cd_len = len(lb_version_response['dataCenters'])
+    traffic_len = len(traffic_list)
+
+    if cd_len != traffic_len:
+        print()
+        root_logger.error('Percentage splits do not match number of data centers')
+        dcs = f'{cd_len} data centers found'
+        print()
+        ts = f'{traffic_len} traffic splits {traffic_list}'
+        root_logger.error(dcs)
+        return root_logger.error(ts)
+
+    for counter, data_center in enumerate(lb_version_response['dataCenters']):
+        data_center['percent'] = traffic_list[counter]
+
+    liveness_response = cloudlet_object.manage_load_balancing_version(session, loadbalance,
+                                                                      lb_version_response['balancingType'],
+                                                                      lb_version_response['dataCenters'],
+                                                                      notes,
+                                                                      lb_version_response.get('livenessSettings'))
+    if liveness_response.ok:
+        lb_version = liveness_response.json()['version']
+        print_json(data=liveness_response.json())
+        print()
+        root_logger.info(f'{loadbalance} v{lb_version} is successfully cloned.')
+        print()
+        root_logger.info('To check version status, please run')
+        root_logger.info(f'akamai cloudlets alb-origin --lb {loadbalance}')
+
+
+@cli.command(short_help='ALB - activate load balancing')
+@click.option('--lb', 'loadbalance', metavar='', help='load balancing name (case sensitive, require exact name match)', required=True)
+@click.option('--network', metavar='', type=click.Choice(['staging', 'production'], case_sensitive=False),
+              help='Akamai network (staging or production)', required=True)
+@click.option('--version', 'version', metavar='', help='Load balancing version to activate', type=int, required=True)
+@click.option('--dryrun', metavar='', help='Validate confiiguration only', is_flag=True, required=False)
+@pass_config
+def alb_lb_activate(config, loadbalance, network, dryrun, version):
+    """
+    Activate load balancing policy
+    """
+    base_url, session = init_config(config.edgerc, config.section)
+    cloudlet_object = Cloudlet(base_url, config.account_key)
+    cloudlet_object.get_account_name(session, config.account_key)
+    response = cloudlet_object.activation_load_balancing_config_version(session, loadbalance, version, network, dryrun)
+    print()
+    if response.ok:
+        lb = f"'{loadbalance}' v{version}"
+        if dryrun:
+            msg = f'load balancing policy {lb} was successfully tested.  To activate, remove --dryrun'
+        else:
+            msg = f'load balancing policy {lb} was successfully activated and'
+            msg = f"{msg} currently {response.json()['status']} on Akamai {network} network"
         root_logger.info(msg)
     else:
         print_json(data=response.json())
@@ -1410,7 +1497,7 @@ def alb_origin_bulk(config, input, version, optcsv):
 
     # rebuild column name based on number of datacenters
     num_datacenters = len(df_normalized_datacenter.columns)
-    new_columns = [f'datacenter_{i+1}' for i in range(num_datacenters)]
+    new_columns = [f'datacenter_{i + 1}' for i in range(num_datacenters)]
     df_normalized_datacenter.columns = new_columns
     result_df = pd.concat([df, df_normalized_datacenter], axis=1)
     result_df = result_df.rename(columns={'loadbalance': 'Load Balancing ID'})
