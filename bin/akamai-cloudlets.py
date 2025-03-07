@@ -1168,6 +1168,8 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
                 root_logger.info('\nno activation history')
                 if optjson:
                     print_json(data=lookup_resp.json())
+                else:
+                    root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
             else:
                 if optjson:
                     albs = lookup_resp.json()
