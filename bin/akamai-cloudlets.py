@@ -1,5 +1,5 @@
 """
-Copyright 2020 Akamai Technologies, Inc. All Rights Reserved..
+Copyright 2020 Akamai Technologies, Inc. All Rights Reserved.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ In case you need quick explanation contact the authors.
 Authors: vbhat@akamai.com, kchinnan@akamai.com, aetsai@akamai.com
 """
 
-PACKAGE_VERSION = '1.2.0'
+PACKAGE_VERSION = '1.2.1'
 
 # setup logging
 if not os.path.exists('logs'):
@@ -1166,29 +1166,41 @@ def alb_origin(config, type, name_contains, list, loadbalance, version, optjson)
         if activation_resp.status_code == 200:
             if len(activation_resp.json()) == 0:
                 root_logger.info('\nno activation history')
+                if optjson:
+                    print_json(data=lookup_resp.json())
+                else:
+                    root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
             else:
-                df = pd.DataFrame(activation_resp.json())
-                df = df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
-                                        'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
-                                        'description': 'Version Notes'})
-                activation_df = df.pivot(index=['Load Balancing ID', 'version'], columns='network', values='status').reset_index()
-                activation_df = activation_df.fillna('')
-                activation_df = activation_df.sort_values(by='version', ascending=False)
-                activation_df = activation_df.reset_index(drop=True)
+                if optjson:
+                    albs = lookup_resp.json()
+                    acts = activation_resp.json()
+                    for alb in albs:
+                        aa = [act for act in acts if act['version'] == alb['version']]
+                        alb['activation'] = aa
+                    print_json(data=albs)
+                else:
+                    df = pd.DataFrame(activation_resp.json())
+                    df = df.rename(columns={'originId': 'Load Balancing ID', 'immutable': 'lock',
+                                            'lastModifiedDate': 'Last Modified', 'lastModifiedBy': 'Last Editor',
+                                            'description': 'Version Notes'})
+                    activation_df = df.pivot(index=['Load Balancing ID', 'version'], columns='network', values='status').reset_index()
+                    activation_df = activation_df.fillna('')
+                    activation_df = activation_df.sort_values(by='version', ascending=False)
+                    activation_df = activation_df.reset_index(drop=True)
 
-        if not activation_df.empty:
-            merged_df = pd.merge(version_df, activation_df, on=['Load Balancing ID', 'version'], how='left')
-            merged_df = merged_df.fillna('')
-            columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'deleted']
-            if 'Version Notes' in merged_df.columns:
-                columns.insert(5, 'Version Notes')
-            if 'STAGING' in merged_df.columns:
-                columns.insert(6, 'STAGING')
-            if 'PRODUCTION' in merged_df.columns:
-                columns.insert(6, 'PRODUCTION')
-            root_logger.info(tabulate(merged_df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
-        else:
-            root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
+                    if not activation_df.empty:
+                        merged_df = pd.merge(version_df, activation_df, on=['Load Balancing ID', 'version'], how='left')
+                        merged_df = merged_df.fillna('')
+                        columns = ['Load Balancing ID', 'version', 'lock', 'Last Modified', 'Last Editor', 'deleted']
+                        if 'Version Notes' in merged_df.columns:
+                            columns.insert(5, 'Version Notes')
+                        if 'STAGING' in merged_df.columns:
+                            columns.insert(6, 'STAGING')
+                        if 'PRODUCTION' in merged_df.columns:
+                            columns.insert(6, 'PRODUCTION')
+                        root_logger.info(tabulate(merged_df[columns], headers=columns, numalign='center', tablefmt='psql', showindex=False))
+                    else:
+                        root_logger.info(tabulate(version_df[version_columns], headers=version_columns, numalign='center', tablefmt='psql', showindex=False, maxcolwidths=30))
 
     if loadbalance and version:
         version_resp = cloudlet_object.get_load_balancing_version(session, loadbalance, version)
