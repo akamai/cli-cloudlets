@@ -376,7 +376,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
             if type == ' ':
                 history_columns = ['version', 'last modified', 'last editor', 'staging', 'production', 'notes']
                 history_df = history_df.fillna('')
-                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, maxcolwidths=60,
+                root_logger.info(tabulate(history_df.reindex(columns=history_columns, fill_value=''), headers=history_columns, maxcolwidths=60,
                                         tablefmt='psql', showindex=False, numalign='center'))
             else:
                 # df.rename(columns={'description': 'notes'}, inplace=True)
@@ -388,7 +388,7 @@ def retrieve(config, optjson, version, policy_id, policy, only_match_rules, show
                                                         'createdBy': 'last editor',
                                                         'version notes': 'notes'})
 
-                root_logger.info(tabulate(history_df[history_columns], headers=history_columns, tablefmt='psql', showindex=False, numalign='center'))
+                root_logger.info(tabulate(history_df.reindex(columns=history_columns, fill_value=''), headers=history_columns, tablefmt='psql', showindex=False, numalign='center'))
     # Writing full json from latest version
     json_file = 'policy.json'
     with open(json_file, 'w') as f:
